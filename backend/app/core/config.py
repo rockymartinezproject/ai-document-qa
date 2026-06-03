@@ -1,0 +1,54 @@
+"""
+Application configuration using Pydantic Settings.
+"""
+
+from typing import List
+
+from pydantic_settings import BaseSettings
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+
+    # Project
+    PROJECT_NAME: str = "AI Document Q&A"
+    PROJECT_VERSION: str = "0.1.0"
+    ENVIRONMENT: str = "development"
+
+    # CORS
+    CORS_ORIGINS: List[str] = ["http://localhost:3000"]
+
+    # API Keys (loaded from .env)
+    OPENAI_API_KEY: str = ""
+    COHERE_API_KEY: str = ""
+    ANTHROPIC_API_KEY: str = ""
+
+    # Vector DB
+    QDRANT_HOST: str = "localhost"
+    QDRANT_PORT: int = 6333
+    QDRANT_COLLECTION_NAME: str = "documents"
+
+    # Embeddings
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION: int = 1536
+    CHUNK_SIZE: int = 512
+    CHUNK_OVERLAP: int = 128
+
+    # LLM
+    DEFAULT_LLM_MODEL: str = "gpt-4o"
+    LOCAL_LLM_URL: str = "http://localhost:11434"
+
+    # Database
+    DATABASE_URL: str = "sqlite+aiosqlite:///./app.db"
+
+    # Uploads
+    UPLOAD_DIR: str = "./uploads"
+    MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        extra = "ignore"
+
+
+settings = Settings()
