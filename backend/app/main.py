@@ -2,11 +2,18 @@
 AI Document Q&A System - FastAPI Backend
 """
 
+from datetime import datetime, timezone
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.logging import setup_logging
+from app.middleware.request_logging import RequestLoggingMiddleware
 from app.api import health
+
+# Setup structured logging on import
+setup_logging()
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -16,7 +23,8 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS middleware
+# Middleware (order matters: last added = first executed)
+app.add_middleware(RequestLoggingMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -35,4 +43,6 @@ async def root():
         "message": "AI Document Q&A API",
         "docs": "/docs",
         "version": settings.PROJECT_VERSION,
+        "environment": settings.ENVIRONMENT,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
