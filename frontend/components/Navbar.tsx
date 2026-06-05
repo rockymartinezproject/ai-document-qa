@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ThemeToggle } from "./ThemeToggle";
 
 const navigation = [
   { name: "Home", href: "/" },
@@ -14,22 +15,25 @@ export function Navbar() {
   const pathname = usePathname();
 
   return (
-    <header className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800">
+    <header className="sticky top-0 z-50 bg-white/80 dark:bg-zinc-900/80 backdrop-blur border-b border-zinc-200 dark:border-zinc-800">
       <nav
         className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4 lg:px-8"
         aria-label="Global"
       >
         <div className="flex items-center gap-x-2">
-          <Link href="/" className="text-lg font-bold text-indigo-600 dark:text-indigo-400">
+          <Link
+            href="/"
+            className="text-lg font-bold text-indigo-600 dark:text-indigo-400"
+          >
             DocQA
           </Link>
         </div>
-        <div className="flex gap-x-6">
+        <div className="flex items-center gap-x-6">
           {navigation.map((item) => (
             <Link
               key={item.name}
               href={item.href}
-              className={`text-sm font-semibold leading-6 ${
+              className={`text-sm font-semibold leading-6 transition-colors ${
                 pathname === item.href
                   ? "text-indigo-600 dark:text-indigo-400"
                   : "text-zinc-700 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-zinc-100"
@@ -38,6 +42,7 @@ export function Navbar() {
               {item.name}
             </Link>
           ))}
+          <ThemeToggle />
         </div>
       </nav>
     </header>
