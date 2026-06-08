@@ -26,6 +26,26 @@ export interface ReadinessData {
   checks: Record<string, boolean>;
 }
 
+export interface DocumentUploadResponse {
+  id: string;
+  filename: string;
+  content_type: string;
+  file_size: number;
+  status: string;
+  created_at: string;
+  message: string;
+}
+
+export interface DocumentOut {
+  id: string;
+  filename: string;
+  content_type: string;
+  file_size: number;
+  status: string;
+  created_at: string;
+  updated_at?: string;
+}
+
 class APIError extends Error {
   constructor(
     message: string,
@@ -44,7 +64,6 @@ async function request<T>(
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
     headers: {
-      "Content-Type": "application/json",
       ...options?.headers,
     },
     ...options,
@@ -53,12 +72,14 @@ async function request<T>(
   const requestId = res.headers.get("x-request-id") || undefined;
 
   if (!res.ok) {
-    const text = await res.text().catch(() => "Unknown error");
-    throw new APIError(
-      `HTTP ${res.status}: ${text}`,
-      res.status,
-      requestId
-    );
+    let detail = "Unknown error";
+    try {
+      const body = await res.json();
+      detail = body.detail || JSON.stringify(body);
+    } catch {
+      detail = await res.text().catch(() => "Unknown error");
+    }
+    throw new APIError(`HTTP ${res.status}: ${detail}`, res.status, requestId);
   }
 
   const body: APIResponse<T> = await res.json();
@@ -69,6 +90,18 @@ async function request<T>(
 export const api = {
   health: () => request<HealthData>("/api/health"),
   ready: () => request<ReadinessData>("/api/health/ready"),
+
+  documents: {
+    list: () => request<DocumentOut[]>("/api/documents"),
+    upload: (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      return request<DocumentUploadResponse>("/api/documents/upload", {
+        method: "POST",
+        body: form,
+      });
+    },
+  },
 };
 
 export { APIError };
