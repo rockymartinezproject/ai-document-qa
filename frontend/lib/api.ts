@@ -36,6 +36,17 @@ export interface DocumentUploadResponse {
   message: string;
 }
 
+export interface URLIngestResponse {
+  id: string;
+  filename: string;
+  url: string;
+  title: string;
+  text_length: number;
+  status: string;
+  created_at: string;
+  message: string;
+}
+
 export interface DocumentOut {
   id: string;
   filename: string;
@@ -99,6 +110,13 @@ export const api = {
       return request<DocumentUploadResponse>("/api/documents/upload", {
         method: "POST",
         body: form,
+      });
+    },
+    uploadUrl: (url: string) => {
+      return request<URLIngestResponse>("/api/documents/url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
       });
     },
   },

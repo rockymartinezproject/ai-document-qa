@@ -11,9 +11,14 @@ from app.core.config import Settings
 from app.core.logging import get_logger
 from app.db.base import get_db
 from app.db.models import Document
-from app.models.document import DocumentOut, DocumentUploadResponse
+from app.models.document import (
+    DocumentOut,
+    DocumentUploadResponse,
+    URLIngestRequest,
+    URLIngestResponse,
+)
 from app.models.response import APIResponse
-from app.services.document_service import save_upload, validate_upload
+from app.services.document_service import save_from_url, save_upload, validate_upload
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 logger = get_logger("documents_api")
@@ -66,6 +71,42 @@ async def upload_document(
         success=document.status == "indexed",
         data=data,
         message="Document uploaded and indexed." if document.status == "indexed" else "Upload succeeded but text extraction failed.",
+        request_id=request_id,
+    )
+
+
+@router.post("/url", response_model=APIResponse[URLIngestResponse])
+async def ingest_url(
+    request: Request,
+    body: URLIngestRequest,
+    session: AsyncSession = Depends(get_db),
+):
+    """Ingest a web page by URL for indexing.
+
+    The page is fetched, article text is extracted, and a database record is
+    created. Future days will add chunking + vector indexing.
+    """
+    request_id = getattr(request.state, "request_id", None)
+    url = str(body.url)
+
+    logger.info("URL ingestion requested: %s", url)
+
+    document = await save_from_url(session=session, url=url)
+
+    data = URLIngestResponse(
+        id=document.id,
+        filename=document.filename,
+        url=document.file_path,
+        title=document.filename,
+        text_length=len(document.extracted_text or ""),
+        status=document.status,
+        created_at=document.created_at,
+    )
+
+    return APIResponse(
+        success=document.status == "indexed",
+        data=data,
+        message="URL ingested and indexed." if document.status == "indexed" else "URL ingestion failed.",
         request_id=request_id,
     )
 

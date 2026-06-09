@@ -7,6 +7,7 @@ import { LoadingCard, LoadingSpinner } from "@/components/Loading";
 export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [urlInput, setUrlInput] = useState("");
   const [documents, setDocuments] = useState<DocumentOut[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,6 +53,26 @@ export default function UploadPage() {
     }
   };
 
+  const handleUrlSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!urlInput.trim()) return;
+
+    setIsUploading(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const res = await api.documents.uploadUrl(urlInput.trim());
+      setSuccess(res.message || `Ingested ${res.data?.title || urlInput}`);
+      setUrlInput("");
+      await fetchDocs();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "URL ingestion failed");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const onDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(true);
@@ -81,7 +102,7 @@ export default function UploadPage() {
           Upload Documents
         </h2>
         <p className="mt-2 text-zinc-600 dark:text-zinc-400">
-          Add PDFs to index them for question answering.
+          Add PDFs or paste URLs to index them for question answering.
         </p>
       </div>
 
@@ -97,41 +118,77 @@ export default function UploadPage() {
         </div>
       )}
 
-      {/* PDF Upload */}
-      <label
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
-        className={`relative block cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
-          isDragging
-            ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
-            : "border-zinc-300 bg-white hover:border-indigo-400 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-indigo-600"
-        }`}
-      >
-        <input
-          type="file"
-          accept=".pdf,application/pdf"
-          className="sr-only"
-          onChange={onInputChange}
-          disabled={isUploading}
-        />
-        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/20">
-          {isUploading ? (
-            <LoadingSpinner />
-          ) : (
-            <DocumentIcon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
-          )}
+      <div className="grid gap-6 sm:grid-cols-2">
+        {/* PDF Upload */}
+        <label
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={`relative block cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+            isDragging
+              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
+              : "border-zinc-300 bg-white hover:border-indigo-400 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-indigo-600"
+          }`}
+        >
+          <input
+            type="file"
+            accept=".pdf,application/pdf"
+            className="sr-only"
+            onChange={onInputChange}
+            disabled={isUploading}
+          />
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/20">
+            {isUploading ? (
+              <LoadingSpinner />
+            ) : (
+              <DocumentIcon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+            )}
+          </div>
+          <h3 className="mt-4 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            {isUploading ? "Uploading..." : "Upload PDF"}
+          </h3>
+          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+            Drag & drop or click to browse
+          </p>
+          <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-600">
+            Max file size: 50MB
+          </p>
+        </label>
+
+        {/* URL Input */}
+        <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 p-8">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 dark:bg-indigo-900/20">
+            {isUploading ? (
+              <LoadingSpinner />
+            ) : (
+              <LinkIcon className="h-6 w-6 text-indigo-600 dark:text-indigo-400" />
+            )}
+          </div>
+          <h3 className="mt-4 text-center text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+            Add URL
+          </h3>
+          <p className="mt-1 text-center text-xs text-zinc-500 dark:text-zinc-400">
+            Paste a web page link
+          </p>
+          <form onSubmit={handleUrlSubmit} className="mt-4">
+            <input
+              type="url"
+              value={urlInput}
+              onChange={(e) => setUrlInput(e.target.value)}
+              placeholder="https://example.com/article"
+              disabled={isUploading}
+              className="w-full rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-2 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+            />
+            <button
+              type="submit"
+              disabled={isUploading || !urlInput.trim()}
+              className="mt-3 w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600"
+            >
+              {isUploading ? "Ingesting..." : "Ingest URL"}
+            </button>
+          </form>
         </div>
-        <h3 className="mt-4 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-          {isUploading ? "Uploading..." : "Upload PDF"}
-        </h3>
-        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-          Drag & drop or click to browse
-        </p>
-        <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-600">
-          Max file size: 50MB
-        </p>
-      </label>
+      </div>
 
       {/* Indexed documents */}
       <div className="mt-12">
@@ -161,7 +218,7 @@ export default function UploadPage() {
                   <StatusBadge status={doc.status} />
                 </div>
                 <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  {(doc.file_size / 1024).toFixed(1)} KB ·{" "}
+                  {doc.content_type === "text/html" ? "Web URL" : `${(doc.file_size / 1024).toFixed(1)} KB`} ·{" "}
                   {new Date(doc.created_at).toLocaleDateString()}
                 </p>
               </div>
@@ -203,6 +260,24 @@ function DocumentIcon({ className }: { className?: string }) {
         strokeLinecap="round"
         strokeLinejoin="round"
         d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
+      />
+    </svg>
+  );
+}
+
+function LinkIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      fill="none"
+      viewBox="0 0 24 24"
+      strokeWidth={1.5}
+      stroke="currentColor"
+    >
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244"
       />
     </svg>
   );

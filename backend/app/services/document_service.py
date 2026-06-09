@@ -2,10 +2,10 @@
 Document upload business logic.
 """
 
-import os
 import uuid
 from pathlib import Path
 from typing import Tuple
+from urllib.parse import urlparse
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,6 +13,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.models import Document
 from app.services.pdf_extractor import extract_text_from_pdf
+from app.services.url_scraper import scrape_url
 
 logger = get_logger("document_service")
 
@@ -93,6 +94,60 @@ async def save_upload(
 
     logger.info(
         "Created document record id=%s filename=%s status=%s",
+        document.id,
+        document.filename,
+        document.status,
+    )
+    return document
+
+
+async def save_from_url(
+    session: AsyncSession,
+    url: str,
+) -> Document:
+    """Scrape a URL and create a database record.
+
+    Args:
+        session: Async SQLAlchemy session.
+        url: The web page URL to ingest.
+
+    Returns:
+        Created Document database record.
+    """
+    scraped = await scrape_url(url)
+
+    if not scraped:
+        # Create failed record
+        document = Document(
+            filename=Path(urlparse(url).path).name or "url_document",
+            content_type="text/html",
+            file_path=url,
+            file_size=0,
+            extracted_text=None,
+            status="failed",
+            error_message="Failed to scrape URL or content too short.",
+        )
+        session.add(document)
+        await session.commit()
+        await session.refresh(document)
+        return document
+
+    status = "indexed"
+    document = Document(
+        filename=scraped["title"],
+        content_type="text/html",
+        file_path=scraped["url"],
+        file_size=scraped["content_length"],
+        extracted_text=scraped["text"],
+        status=status,
+        error_message=None,
+    )
+    session.add(document)
+    await session.commit()
+    await session.refresh(document)
+
+    logger.info(
+        "Created URL document record id=%s title=%s status=%s",
         document.id,
         document.filename,
         document.status,
