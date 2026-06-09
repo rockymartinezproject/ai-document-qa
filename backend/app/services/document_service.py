@@ -11,7 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
+from app.db.models import Chunk as ChunkModel
 from app.db.models import Document
+from app.services.chunking import chunk_document
 from app.services.pdf_extractor import extract_text_from_pdf
 from app.services.url_scraper import scrape_url
 
@@ -44,6 +46,40 @@ def validate_upload(filename: str, content_type: str, size: int) -> Tuple[bool, 
         return False, "File is empty."
 
     return True, ""
+
+
+async def _chunk_and_store(
+    session: AsyncSession,
+    document: Document,
+) -> None:
+    """Split document text into chunks and store in DB."""
+    if not document.extracted_text:
+        return
+
+    chunks = chunk_document(
+        text=document.extracted_text,
+        document_id=document.id,
+        source=document.filename,
+    )
+
+    for chunk in chunks:
+        session.add(
+            ChunkModel(
+                document_id=chunk.document_id,
+                index=chunk.index,
+                text=chunk.text,
+                source=chunk.source,
+                start_char=chunk.start_char,
+                end_char=chunk.end_char,
+            )
+        )
+
+    await session.commit()
+    logger.info(
+        "Created %d chunks for document %s",
+        len(chunks),
+        document.id,
+    )
 
 
 async def save_upload(
@@ -91,6 +127,10 @@ async def save_upload(
     session.add(document)
     await session.commit()
     await session.refresh(document)
+
+    # Chunk the document
+    if extracted_text:
+        await _chunk_and_store(session, document)
 
     logger.info(
         "Created document record id=%s filename=%s status=%s",
@@ -145,6 +185,9 @@ async def save_from_url(
     session.add(document)
     await session.commit()
     await session.refresh(document)
+
+    # Chunk the document
+    await _chunk_and_store(session, document)
 
     logger.info(
         "Created URL document record id=%s title=%s status=%s",

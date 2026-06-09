@@ -5,7 +5,7 @@ SQLAlchemy models for persistent entities.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
 
 from app.db.base import Base
 
@@ -29,3 +29,18 @@ class Document(Base):
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=now_utc, nullable=False)
     updated_at = Column(DateTime, default=now_utc, onupdate=now_utc, nullable=False)
+
+
+class Chunk(Base):
+    """Represents a text chunk from a document."""
+
+    __tablename__ = "chunks"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    document_id = Column(String(36), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    index = Column(Integer, nullable=False)
+    text = Column(Text, nullable=False)
+    source = Column(String(512), nullable=False)
+    start_char = Column(Integer, nullable=False)
+    end_char = Column(Integer, nullable=False)
+    created_at = Column(DateTime, default=now_utc, nullable=False)
