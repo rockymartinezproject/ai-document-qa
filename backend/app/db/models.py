@@ -43,4 +43,6 @@ class Chunk(Base):
     source = Column(String(512), nullable=False)
     start_char = Column(Integer, nullable=False)
     end_char = Column(Integer, nullable=False)
+    embedding = Column(Text, nullable=True)  # JSON serialized vector
+    embedding_model = Column(String(128), nullable=True)
     created_at = Column(DateTime, default=now_utc, nullable=False)

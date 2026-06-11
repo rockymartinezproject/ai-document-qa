@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Tuple
 from urllib.parse import urlparse
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -14,6 +15,11 @@ from app.core.logging import get_logger
 from app.db.models import Chunk as ChunkModel
 from app.db.models import Document
 from app.services.chunking import chunk_document
+from app.services.embeddings import (
+    deserialize_embedding,
+    get_embedding_provider,
+    serialize_embedding,
+)
 from app.services.pdf_extractor import extract_text_from_pdf
 from app.services.url_scraper import scrape_url
 
@@ -48,11 +54,54 @@ def validate_upload(filename: str, content_type: str, size: int) -> Tuple[bool, 
     return True, ""
 
 
+async def embed_chunks_for_document(
+    session: AsyncSession,
+    document_id: str,
+) -> int:
+    """Generate and store embeddings for all chunks of a document.
+
+    Args:
+        session: Async SQLAlchemy session.
+        document_id: Document UUID.
+
+    Returns:
+        Number of chunks processed.
+    """
+    result = await session.execute(
+        select(ChunkModel).where(
+            ChunkModel.document_id == document_id,
+            ChunkModel.embedding.is_(None),
+        )
+    )
+    chunks = result.scalars().all()
+
+    if not chunks:
+        return 0
+
+    provider = get_embedding_provider()
+    texts = [c.text for c in chunks]
+    embeddings = await provider.embed(texts)
+
+    for chunk, vector in zip(chunks, embeddings):
+        if vector:
+            chunk.embedding = serialize_embedding(vector)
+            chunk.embedding_model = provider.name
+
+    await session.commit()
+    logger.info(
+        "Embedded %d chunks for document %s using %s",
+        len(chunks),
+        document_id,
+        provider.name,
+    )
+    return len(chunks)
+
+
 async def _chunk_and_store(
     session: AsyncSession,
     document: Document,
 ) -> None:
-    """Split document text into chunks and store in DB."""
+    """Split document text into chunks, store in DB, and generate embeddings."""
     if not document.extracted_text:
         return
 
@@ -80,6 +129,7 @@ async def _chunk_and_store(
         len(chunks),
         document.id,
     )
+
 
 
 async def save_upload(
