@@ -9,6 +9,7 @@ const navigation = [
   { name: "Chat", href: "/chat" },
   { name: "Upload", href: "/upload" },
   { name: "Dashboard", href: "/dashboard" },
+  { name: "About", href: "/about" },
 ];
 
 export function Navbar() {
