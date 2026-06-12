@@ -22,6 +22,7 @@ from app.services.embeddings import (
 )
 from app.services.pdf_extractor import extract_text_from_pdf
 from app.services.url_scraper import scrape_url
+from app.services.vector_store import upsert_chunk_points
 
 logger = get_logger("document_service")
 
@@ -94,6 +95,24 @@ async def embed_chunks_for_document(
         document_id,
         provider.name,
     )
+
+    # Sync to Qdrant vector store
+    chunk_points = [
+        {
+            "id": c.id,
+            "document_id": c.document_id,
+            "text": c.text,
+            "source": c.source,
+            "index": c.index,
+            "embedding": deserialize_embedding(c.embedding),
+            "start_char": c.start_char,
+            "end_char": c.end_char,
+        }
+        for c in chunks
+        if c.embedding
+    ]
+    await upsert_chunk_points(chunk_points)
+
     return len(chunks)
 
 

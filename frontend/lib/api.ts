@@ -57,6 +57,37 @@ export interface DocumentOut {
   updated_at?: string;
 }
 
+export interface SearchResult {
+  id: string;
+  score: number;
+  document_id: string;
+  text: string;
+  source: string;
+  index: number;
+  start_char: number;
+  end_char: number;
+}
+
+export interface SearchResponse {
+  query: string;
+  results: SearchResult[];
+  total_results: number;
+}
+
+export interface VectorStoreStatus {
+  collection_name: string;
+  qdrant_host: string;
+  qdrant_port: number;
+  total_points: number;
+  is_healthy: boolean;
+}
+
+export interface SyncDocumentResponse {
+  document_id: string;
+  points_synced: number;
+  message: string;
+}
+
 class APIError extends Error {
   constructor(
     message: string,
@@ -117,6 +148,22 @@ export const api = {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url }),
+      });
+    },
+  },
+
+  search: {
+    status: () => request<VectorStoreStatus>("/api/search/status"),
+    query: (query: string, top_k = 5, document_id?: string) => {
+      return request<SearchResponse>("/api/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, top_k, document_id }),
+      });
+    },
+    syncDocument: (documentId: string) => {
+      return request<SyncDocumentResponse>(`/api/search/sync/${documentId}`, {
+        method: "POST",
       });
     },
   },
