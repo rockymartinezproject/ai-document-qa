@@ -2,6 +2,7 @@
 Pydantic models for chat API.
 """
 
+from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -18,6 +19,10 @@ class ChatRequest(BaseModel):
         ge=0.0,
         le=1.0,
         description="Minimum similarity score for retrieved chunks",
+    )
+    conversation_id: Optional[str] = Field(
+        default=None,
+        description="Existing conversation ID (creates new thread if omitted)",
     )
 
 
@@ -39,3 +44,39 @@ class ChatResponse(BaseModel):
     citations: List[CitationOut]
     provider: str
     query: str
+    conversation_id: str
+
+
+class MessageOut(BaseModel):
+    """Single message in a conversation."""
+
+    id: str
+    role: str
+    content: str
+    citations: Optional[List[CitationOut]] = None
+    provider: Optional[str] = None
+    created_at: datetime
+
+
+class ConversationOut(BaseModel):
+    """Conversation thread without messages."""
+
+    id: str
+    title: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+
+
+class ConversationDetailOut(BaseModel):
+    """Conversation thread with messages."""
+
+    id: str
+    title: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    messages: List[MessageOut]
+
+
+class CreateConversationRequest(BaseModel):
+    title: Optional[str] = None

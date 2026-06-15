@@ -88,6 +88,48 @@ export interface SyncDocumentResponse {
   message: string;
 }
 
+export interface Citation {
+  chunk_id: string;
+  document_id: string;
+  source: string;
+  index: number;
+  text: string;
+  score: number;
+}
+
+export interface ChatResponse {
+  answer: string;
+  citations: Citation[];
+  provider: string;
+  query: string;
+  conversation_id: string;
+}
+
+export interface Conversation {
+  id: string;
+  title?: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  citations?: Citation[];
+  provider?: string;
+  created_at: string;
+}
+
+export interface ConversationDetail {
+  id: string;
+  title?: string;
+  created_at: string;
+  updated_at: string;
+  messages: ChatMessage[];
+}
+
 class APIError extends Error {
   constructor(
     message: string,
@@ -169,13 +211,29 @@ export const api = {
   },
 
   chat: {
-    ask: (query: string, document_id?: string) => {
+    ask: (query: string, conversation_id?: string, document_id?: string) => {
       return request<ChatResponse>("/api/chat/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, document_id }),
+        body: JSON.stringify({ query, conversation_id, document_id }),
       });
     },
+  },
+
+  conversations: {
+    list: () => request<Conversation[]>("/api/conversations"),
+    create: (title?: string) => {
+      return request<Conversation>("/api/conversations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+    },
+    get: (id: string) => request<ConversationDetail>(`/api/conversations/${id}`),
+    delete: (id: string) =>
+      request<{ deleted: boolean }>(`/api/conversations/${id}`, {
+        method: "DELETE",
+      }),
   },
 };
 
