@@ -1,0 +1,41 @@
+"""
+Pydantic models for chat API.
+"""
+
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
+
+
+class ChatRequest(BaseModel):
+    """Request body for asking a question."""
+
+    query: str = Field(..., min_length=1, description="User question")
+    top_k: int = Field(default=5, ge=1, le=20, description="Number of chunks to retrieve")
+    document_id: Optional[str] = Field(default=None, description="Optional document filter")
+    score_threshold: Optional[float] = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Minimum similarity score for retrieved chunks",
+    )
+
+
+class CitationOut(BaseModel):
+    """Citation included in a chat response."""
+
+    chunk_id: str
+    document_id: str
+    source: str
+    index: int
+    text: str
+    score: float
+
+
+class ChatResponse(BaseModel):
+    """Response to a chat question."""
+
+    answer: str
+    citations: List[CitationOut]
+    provider: str
+    query: str

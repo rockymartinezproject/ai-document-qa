@@ -167,6 +167,16 @@ export const api = {
       });
     },
   },
+
+  chat: {
+    ask: (query: string, document_id?: string) => {
+      return request<ChatResponse>("/api/chat/ask", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, document_id }),
+      });
+    },
+  },
 };
 
 export { APIError };
