@@ -3,15 +3,16 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, DocumentOut } from "@/lib/api";
 import { LoadingCard, LoadingSpinner } from "@/components/Loading";
+import { ToastContainer, showToast } from "@/components/Toast";
 
 export default function UploadPage() {
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [urlInput, setUrlInput] = useState("");
   const [documents, setDocuments] = useState<DocumentOut[]>([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
+  const [actionId, setActionId] = useState<string | null>(null);
 
   const fetchDocs = useCallback(async () => {
     try {
@@ -19,6 +20,7 @@ export default function UploadPage() {
       setDocuments(res.data || []);
     } catch (e) {
       console.error(e);
+      showToast("Failed to load documents", "error");
     } finally {
       setLoadingDocs(false);
     }
@@ -30,26 +32,26 @@ export default function UploadPage() {
 
   const handleFile = async (file: File) => {
     if (file.type !== "application/pdf" && !file.name.endsWith(".pdf")) {
-      setError("Only PDF files are supported.");
+      showToast("Only PDF files are supported.", "error");
       return;
     }
     if (file.size > 50 * 1024 * 1024) {
-      setError("File size must be under 50MB.");
+      showToast("File size must be under 50MB.", "error");
       return;
     }
 
     setIsUploading(true);
-    setError(null);
-    setSuccess(null);
+    setUploadProgress(`Uploading ${file.name}...`);
 
     try {
       const res = await api.documents.upload(file);
-      setSuccess(res.message || `Uploaded ${file.name}`);
+      showToast(res.message || `Uploaded ${file.name}`, "success");
       await fetchDocs();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Upload failed");
+      showToast(e instanceof Error ? e.message : "Upload failed", "error");
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -58,18 +60,45 @@ export default function UploadPage() {
     if (!urlInput.trim()) return;
 
     setIsUploading(true);
-    setError(null);
-    setSuccess(null);
+    setUploadProgress("Ingesting URL...");
 
     try {
       const res = await api.documents.uploadUrl(urlInput.trim());
-      setSuccess(res.message || `Ingested ${res.data?.title || urlInput}`);
+      showToast(res.message || `Ingested ${res.data?.title || urlInput}`, "success");
       setUrlInput("");
       await fetchDocs();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "URL ingestion failed");
+      showToast(err instanceof Error ? err.message : "URL ingestion failed", "error");
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Delete this document?")) return;
+    setActionId(id);
+    try {
+      const res = await api.documents.delete(id);
+      showToast(res.data?.message || "Document deleted", "success");
+      await fetchDocs();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Delete failed", "error");
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleReindex = async (id: string) => {
+    setActionId(id);
+    try {
+      const res = await api.documents.reindex(id);
+      showToast(res.data?.message || "Document reindexed", "success");
+      await fetchDocs();
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Reindex failed", "error");
+    } finally {
+      setActionId(null);
     }
   };
 
@@ -97,6 +126,8 @@ export default function UploadPage() {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
+      <ToastContainer />
+
       <div className="mb-8">
         <h2 className="text-2xl font-bold text-zinc-900 dark:text-zinc-100">
           Upload Documents
@@ -106,15 +137,10 @@ export default function UploadPage() {
         </p>
       </div>
 
-      {/* Alerts */}
-      {error && (
-        <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/50 dark:bg-red-900/20 dark:text-red-200">
-          {error}
-        </div>
-      )}
-      {success && (
-        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900/50 dark:bg-green-900/20 dark:text-green-200">
-          {success}
+      {uploadProgress && (
+        <div className="mb-6 flex items-center gap-3 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-800 dark:border-indigo-900/50 dark:bg-indigo-900/20 dark:text-indigo-200">
+          <LoadingSpinner size="sm" />
+          {uploadProgress}
         </div>
       )}
 
@@ -124,9 +150,9 @@ export default function UploadPage() {
           onDragOver={onDragOver}
           onDragLeave={onDragLeave}
           onDrop={onDrop}
-          className={`relative block cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-colors ${
+          className={`relative block cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
             isDragging
-              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20"
+              ? "border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 scale-[1.02]"
               : "border-zinc-300 bg-white hover:border-indigo-400 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-indigo-600"
           }`}
         >
@@ -218,9 +244,27 @@ export default function UploadPage() {
                   <StatusBadge status={doc.status} />
                 </div>
                 <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-                  {doc.content_type === "text/html" ? "Web URL" : `${(doc.file_size / 1024).toFixed(1)} KB`} ·{" "}
+                  {doc.content_type === "text/html"
+                    ? "Web URL"
+                    : `${(doc.file_size / 1024).toFixed(1)} KB`} ·{" "}
                   {new Date(doc.created_at).toLocaleDateString()}
                 </p>
+                <div className="mt-4 flex gap-2">
+                  <button
+                    onClick={() => handleReindex(doc.id)}
+                    disabled={actionId === doc.id}
+                    className="flex-1 rounded-md border border-zinc-300 dark:border-zinc-700 px-2 py-1 text-xs font-medium text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 disabled:opacity-50"
+                  >
+                    {actionId === doc.id ? "Working..." : "Reindex"}
+                  </button>
+                  <button
+                    onClick={() => handleDelete(doc.id)}
+                    disabled={actionId === doc.id}
+                    className="rounded-md border border-red-200 dark:border-red-900/50 px-2 py-1 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             ))
           )}

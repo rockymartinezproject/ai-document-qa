@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api, ChatMessage, Conversation, SearchResult } from "@/lib/api";
+import { api, ChatMessage, Citation, Conversation } from "@/lib/api";
 import { LoadingSpinner } from "@/components/Loading";
 
 type Message =
@@ -9,7 +9,7 @@ type Message =
   | {
       role: "assistant";
       content: string;
-      citations: SearchResult[];
+      citations: Citation[];
       provider: string;
     };
 
@@ -23,14 +23,6 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    loadConversations();
-  }, []);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
   const loadConversations = async () => {
     try {
       const res = await api.conversations.list();
@@ -41,6 +33,14 @@ export default function ChatPage() {
       setIsLoadingConversations(false);
     }
   };
+
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const startNewChat = async () => {
     try {
@@ -68,7 +68,7 @@ export default function ChatPage() {
           : {
               role: "assistant",
               content: m.content,
-              citations: (m.citations || []) as SearchResult[],
+              citations: m.citations || [],
               provider: m.provider || "unknown",
             }
       );

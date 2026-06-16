@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = "localhost"
     QDRANT_PORT: int = 6333
     QDRANT_COLLECTION_NAME: str = "documents"
+    QDRANT_TIMEOUT: float = 10.0
 
     # Embeddings
     EMBEDDING_MODEL: str = "text-embedding-3-small"

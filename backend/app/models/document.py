@@ -52,3 +52,12 @@ class URLIngestResponse(BaseModel):
     status: str
     created_at: datetime
     message: str = Field(default="URL ingested successfully")
+
+
+class DocumentActionResponse(BaseModel):
+    """Response after a document action (delete, reindex)."""
+
+    id: str
+    action: str
+    success: bool
+    message: str

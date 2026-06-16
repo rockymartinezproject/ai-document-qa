@@ -47,6 +47,13 @@ export interface URLIngestResponse {
   message: string;
 }
 
+export interface DocumentActionResponse {
+  id: string;
+  action: string;
+  success: boolean;
+  message: string;
+}
+
 export interface DocumentOut {
   id: string;
   filename: string;
@@ -192,6 +199,14 @@ export const api = {
         body: JSON.stringify({ url }),
       });
     },
+    delete: (id: string) =>
+      request<DocumentActionResponse>(`/api/documents/${id}`, {
+        method: "DELETE",
+      }),
+    reindex: (id: string) =>
+      request<DocumentActionResponse>(`/api/documents/${id}/reindex`, {
+        method: "POST",
+      }),
   },
 
   search: {

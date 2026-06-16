@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
+import { ToastContainer } from "@/components/Toast";
 
 export const metadata: Metadata = {
   title: "AI Document Q&A",
@@ -41,6 +42,7 @@ export default function RootLayout({
         <Navbar />
         <main className="flex-1">{children}</main>
         <Footer />
+        <ToastContainer />
       </body>
     </html>
   );

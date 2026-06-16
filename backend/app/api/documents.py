@@ -2,6 +2,8 @@
 Document upload and management endpoints.
 """
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,15 +12,17 @@ from app.api.deps import get_settings
 from app.core.config import Settings
 from app.core.logging import get_logger
 from app.db.base import get_db
-from app.db.models import Document
+from app.db.models import Chunk, Document
 from app.models.document import (
+    DocumentActionResponse,
     DocumentOut,
     DocumentUploadResponse,
     URLIngestRequest,
     URLIngestResponse,
 )
 from app.models.response import APIResponse
-from app.services.document_service import save_from_url, save_upload, validate_upload
+from app.services.document_service import embed_chunks_for_document, save_from_url, save_upload, validate_upload
+from app.services.vector_store import delete_document_chunks
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
 logger = get_logger("documents_api")
@@ -125,5 +129,124 @@ async def list_documents(
     return APIResponse(
         success=True,
         data=[DocumentOut.model_validate(r) for r in rows],
+        request_id=request_id,
+    )
+
+
+@router.delete("/{document_id}", response_model=APIResponse[DocumentActionResponse])
+async def delete_document(
+    request: Request,
+    document_id: str,
+    session: AsyncSession = Depends(get_db),
+):
+    """Delete a document, its chunks, and its Qdrant vectors."""
+    request_id = getattr(request.state, "request_id", None)
+
+    result = await session.execute(select(Document).where(Document.id == document_id))
+    document = result.scalar_one_or_none()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    filename = document.filename
+
+    # Delete associated file if it's a local upload
+    try:
+        if document.content_type == "application/pdf":
+            path = Path(document.file_path)
+            if path.exists():
+                path.unlink()
+    except Exception as e:
+        logger.warning("Failed to delete file %s: %s", document.file_path, e)
+
+    # Delete Qdrant points
+    try:
+        await delete_document_chunks(document_id)
+    except Exception as e:
+        logger.warning("Failed to delete Qdrant points for %s: %s", document_id, e)
+
+    # Delete DB record (cascades to chunks)
+    await session.delete(document)
+    await session.commit()
+
+    logger.info("Deleted document %s", document_id)
+
+    return APIResponse(
+        success=True,
+        data=DocumentActionResponse(
+            id=document_id,
+            action="delete",
+            success=True,
+            message=f"Deleted {filename}",
+        ),
+        request_id=request_id,
+    )
+
+
+@router.post("/{document_id}/reindex", response_model=APIResponse[DocumentActionResponse])
+async def reindex_document(
+    request: Request,
+    document_id: str,
+    session: AsyncSession = Depends(get_db),
+):
+    """Re-embed and re-sync a document to Qdrant."""
+    request_id = getattr(request.state, "request_id", None)
+
+    result = await session.execute(select(Document).where(Document.id == document_id))
+    document = result.scalar_one_or_none()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if not document.extracted_text:
+        raise HTTPException(status_code=400, detail="Document has no extractable text")
+
+    # Delete existing chunks and embeddings
+    await session.execute(Chunk.__table__.delete().where(Chunk.document_id == document_id))
+    await session.commit()
+
+    # Delete Qdrant points
+    try:
+        await delete_document_chunks(document_id)
+    except Exception as e:
+        logger.warning("Failed to delete old Qdrant points for %s: %s", document_id, e)
+
+    # Re-chunk and embed
+    from app.services.chunking import chunk_document
+
+    chunks = chunk_document(
+        text=document.extracted_text,
+        document_id=document.id,
+        source=document.filename,
+    )
+
+    for chunk in chunks:
+        session.add(
+            Chunk(
+                document_id=chunk.document_id,
+                index=chunk.index,
+                text=chunk.text,
+                source=chunk.source,
+                start_char=chunk.start_char,
+                end_char=chunk.end_char,
+            )
+        )
+    await session.commit()
+
+    # Embed and sync to Qdrant
+    try:
+        embedded = await embed_chunks_for_document(session, document_id)
+        logger.info("Reindexed document %s with %d chunks", document_id, embedded)
+        message = f"Reindexed {document.filename} ({embedded} chunks)"
+    except Exception as e:
+        logger.warning("Failed to sync embeddings to Qdrant for %s: %s", document_id, e)
+        message = f"Reindexed {document.filename} in database, but vector sync failed"
+
+    return APIResponse(
+        success=True,
+        data=DocumentActionResponse(
+            id=document_id,
+            action="reindex",
+            success=True,
+            message=message,
+        ),
         request_id=request_id,
     )

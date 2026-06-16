@@ -32,6 +32,7 @@ def get_qdrant_client() -> AsyncQdrantClient:
         _client = AsyncQdrantClient(
             host=settings.QDRANT_HOST,
             port=settings.QDRANT_PORT,
+            timeout=settings.QDRANT_TIMEOUT,
         )
     return _client
 
