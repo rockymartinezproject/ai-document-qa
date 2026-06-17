@@ -5,10 +5,12 @@ RAG pipeline: retrieve relevant chunks and generate cited answers.
 from dataclasses import dataclass
 from typing import List, Optional
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.core.logging import get_logger
 from app.services.embeddings import get_embedding_provider
+from app.services.hybrid_search import hybrid_search
 from app.services.llm import get_llm_provider
-from app.services.vector_store import search_similar
 
 logger = get_logger("rag")
 
@@ -64,6 +66,7 @@ async def answer_question(
     top_k: int = 5,
     document_id: Optional[str] = None,
     score_threshold: Optional[float] = 0.5,
+    session: Optional[AsyncSession] = None,
 ) -> RAGAnswer:
     """Run the full RAG pipeline.
 
@@ -71,26 +74,21 @@ async def answer_question(
         query: User question.
         top_k: Number of chunks to retrieve.
         document_id: Optional document filter.
-        score_threshold: Minimum similarity score.
+        score_threshold: Minimum vector similarity score.
+        session: Optional database session for keyword/hybrid search.
 
     Returns:
         RAGAnswer with generated text and citations.
     """
     logger.info("RAG query: %s", query)
 
-    # 1. Embed query
-    embedding_provider = get_embedding_provider()
-    query_vectors = await embedding_provider.embed([query])
-
-    if not query_vectors or not query_vectors[0]:
-        raise RuntimeError("Failed to embed query")
-
-    # 2. Retrieve relevant chunks
-    results = await search_similar(
-        query_vector=query_vectors[0],
+    # 1. Retrieve relevant chunks via hybrid search (vector + keyword RRF)
+    results = await hybrid_search(
+        query=query,
         top_k=top_k,
         document_id=document_id,
         score_threshold=score_threshold,
+        session=session,
     )
 
     logger.info("Retrieved %d chunks for query", len(results))
@@ -99,10 +97,10 @@ async def answer_question(
         return RAGAnswer(
             answer="I couldn't find any relevant information in the indexed documents.",
             citations=[],
-            provider=embedding_provider.name,
+            provider=get_embedding_provider().name,
         )
 
-    # 3. Build citations
+    # 2. Build citations
     citations = [
         Citation(
             chunk_id=r["id"],
@@ -115,7 +113,7 @@ async def answer_question(
         for r in results
     ]
 
-    # 4. Generate answer with LLM
+    # 3. Generate answer with LLM
     llm_provider = get_llm_provider()
     prompt = _build_prompt(query, results)
     answer = await llm_provider.generate(

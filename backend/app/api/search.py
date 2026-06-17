@@ -1,5 +1,5 @@
 """
-Vector search and Qdrant sync endpoints.
+Vector/keyword/hybrid search and Qdrant sync endpoints.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -18,6 +18,8 @@ from app.models.search import (
     VectorStoreStatusResponse,
 )
 from app.services.embeddings import deserialize_embedding, get_embedding_provider
+from app.services.hybrid_search import hybrid_search
+from app.services.keyword_search import search_chunks_keywords
 from app.services.vector_store import (
     count_points,
     delete_document_chunks,
@@ -63,25 +65,41 @@ async def vector_store_status(request: Request):
 
 
 @router.post("", response_model=APIResponse[SearchResponse])
-async def semantic_search(
+async def search(
     request: Request,
     body: SearchRequest,
+    session: AsyncSession = Depends(get_db),
 ):
-    """Perform semantic search across indexed chunks."""
+    """Perform semantic, keyword, or hybrid search across indexed chunks."""
     request_id = getattr(request.state, "request_id", None)
 
-    provider = get_embedding_provider()
-    query_vectors = await provider.embed([body.query])
-
-    if not query_vectors or not query_vectors[0]:
-        raise HTTPException(status_code=500, detail="Failed to embed query")
-
-    results = await search_similar(
-        query_vector=query_vectors[0],
-        top_k=body.top_k,
-        document_id=body.document_id,
-        score_threshold=body.score_threshold,
-    )
+    if body.search_type == "keyword":
+        results = await search_chunks_keywords(
+            session=session,
+            query=body.query,
+            top_k=body.top_k,
+            document_id=body.document_id,
+        )
+    elif body.search_type == "semantic":
+        provider = get_embedding_provider()
+        query_vectors = await provider.embed([body.query])
+        if not query_vectors or not query_vectors[0]:
+            raise HTTPException(status_code=500, detail="Failed to embed query")
+        results = await search_similar(
+            query_vector=query_vectors[0],
+            top_k=body.top_k,
+            document_id=body.document_id,
+            score_threshold=body.score_threshold,
+        )
+    else:
+        results = await hybrid_search(
+            query=body.query,
+            top_k=body.top_k,
+            document_id=body.document_id,
+            score_threshold=body.score_threshold,
+            session=session,
+            rrf_k=body.rrf_k,
+        )
 
     data = SearchResponse(
         query=body.query,

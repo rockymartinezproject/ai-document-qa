@@ -3,7 +3,7 @@ Pydantic models for chat API.
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -19,6 +19,10 @@ class ChatRequest(BaseModel):
         ge=0.0,
         le=1.0,
         description="Minimum similarity score for retrieved chunks",
+    )
+    search_type: Literal["semantic", "keyword", "hybrid"] = Field(
+        default="hybrid",
+        description="Retrieval mode: semantic, keyword, or hybrid",
     )
     conversation_id: Optional[str] = Field(
         default=None,

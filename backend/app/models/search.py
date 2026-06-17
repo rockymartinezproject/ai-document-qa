@@ -1,14 +1,14 @@
 """
-Pydantic models for vector search API.
+Pydantic models for vector/search API.
 """
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
 class SearchRequest(BaseModel):
-    """Request body for semantic search."""
+    """Request body for search."""
 
     query: str = Field(..., min_length=1, description="Natural language query")
     top_k: int = Field(default=5, ge=1, le=50, description="Number of results")
@@ -17,12 +17,22 @@ class SearchRequest(BaseModel):
         default=None,
         ge=0.0,
         le=1.0,
-        description="Minimum cosine similarity score",
+        description="Minimum cosine similarity score for vector results",
+    )
+    search_type: Literal["semantic", "keyword", "hybrid"] = Field(
+        default="hybrid",
+        description="Search mode: semantic (vector only), keyword (BM25), or hybrid (RRF fusion)",
+    )
+    rrf_k: int = Field(
+        default=60,
+        ge=1,
+        le=200,
+        description="Reciprocal rank fusion constant",
     )
 
 
 class SearchResult(BaseModel):
-    """Single semantic search result."""
+    """Single search result."""
 
     id: str
     score: float
@@ -35,7 +45,7 @@ class SearchResult(BaseModel):
 
 
 class SearchResponse(BaseModel):
-    """Response from semantic search."""
+    """Response from search."""
 
     query: str
     results: list[SearchResult]

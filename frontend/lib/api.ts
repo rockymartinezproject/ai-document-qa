@@ -211,11 +211,16 @@ export const api = {
 
   search: {
     status: () => request<VectorStoreStatus>("/api/search/status"),
-    query: (query: string, top_k = 5, document_id?: string) => {
+    query: (
+      query: string,
+      top_k = 5,
+      document_id?: string,
+      search_type: "semantic" | "keyword" | "hybrid" = "hybrid"
+    ) => {
       return request<SearchResponse>("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, top_k, document_id }),
+        body: JSON.stringify({ query, top_k, document_id, search_type }),
       });
     },
     syncDocument: (documentId: string) => {
@@ -226,11 +231,16 @@ export const api = {
   },
 
   chat: {
-    ask: (query: string, conversation_id?: string, document_id?: string) => {
+    ask: (
+      query: string,
+      conversation_id?: string,
+      document_id?: string,
+      search_type: "semantic" | "keyword" | "hybrid" = "hybrid"
+    ) => {
       return request<ChatResponse>("/api/chat/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, conversation_id, document_id }),
+        body: JSON.stringify({ query, conversation_id, document_id, search_type }),
       });
     },
   },
