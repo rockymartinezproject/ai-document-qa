@@ -39,6 +39,12 @@ class Settings(BaseSettings):
     DEFAULT_LLM_MODEL: str = "gpt-4o"
     LOCAL_LLM_URL: str = "http://localhost:11434"
 
+    # Reranking
+    RERANK_ENABLED: bool = True
+    RERANK_PROVIDER: str = "cross_encoder"  # cross_encoder | cohere | none
+    CROSS_ENCODER_MODEL: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    COHERE_RERANK_MODEL: str = "rerank-english-v3.0"
+
     # Database
     DATABASE_URL: str = "sqlite+aiosqlite:///./app.db"
 

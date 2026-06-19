@@ -99,6 +99,7 @@ async def search(
             score_threshold=body.score_threshold,
             session=session,
             rrf_k=body.rrf_k,
+            rerank=body.rerank,
         )
 
     data = SearchResponse(

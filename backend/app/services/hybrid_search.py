@@ -1,5 +1,6 @@
 """
-Hybrid search: combine vector similarity and keyword search using reciprocal rank fusion.
+Hybrid search: combine vector similarity and keyword search using reciprocal rank fusion,
+with optional cross-encoder / Cohere reranking.
 """
 
 import asyncio
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.services.embeddings import get_embedding_provider
 from app.services.keyword_search import search_chunks_keywords
+from app.services.reranker import get_reranker
 from app.services.vector_store import search_similar
 
 logger = get_logger("hybrid_search")
@@ -74,6 +76,11 @@ async def _safe_vector_search(
         return []
 
 
+def _candidate_top_k(final_top_k: int) -> int:
+    """Retrieve enough candidates to give the reranker a meaningful pool."""
+    return max(final_top_k * 4, 20)
+
+
 async def hybrid_search(
     query: str,
     top_k: int = 5,
@@ -81,11 +88,14 @@ async def hybrid_search(
     score_threshold: Optional[float] = None,
     session: Optional[AsyncSession] = None,
     rrf_k: int = DEFAULT_RRF_K,
+    rerank: bool = True,
 ) -> List[Dict[str, Any]]:
-    """Run hybrid search: vector + keyword fused with RRF.
+    """Run hybrid search: vector + keyword fused with RRF, then reranked.
 
     If vector search fails (e.g. Qdrant unavailable), keyword results are used alone.
     If no session is provided, keyword search is skipped.
+    If reranking is disabled or the configured reranker fails to load, the RRF
+    fused results are returned.
 
     Args:
         query: Natural language query.
@@ -94,17 +104,20 @@ async def hybrid_search(
         score_threshold: Minimum vector similarity score.
         session: Async SQLAlchemy session for keyword search.
         rrf_k: RRF rank constant.
+        rerank: Whether to apply the configured reranker.
 
     Returns:
-        Merged and reranked list of chunk results.
+        Merged, reranked list of chunk results.
     """
+    candidate_k = _candidate_top_k(top_k)
+
     vector_task = asyncio.create_task(
-        _safe_vector_search(query, top_k, document_id, score_threshold)
+        _safe_vector_search(query, candidate_k, document_id, score_threshold)
     )
 
     if session is not None:
         keyword_task = asyncio.create_task(
-            search_chunks_keywords(session, query, top_k=top_k, document_id=document_id)
+            search_chunks_keywords(session, query, top_k=candidate_k, document_id=document_id)
         )
         vector_results, keyword_results = await asyncio.gather(vector_task, keyword_task)
     else:
@@ -112,10 +125,23 @@ async def hybrid_search(
         keyword_results = []
 
     fused = _reciprocal_rank_fusion(vector_results, keyword_results, k=rrf_k)
-    logger.info(
-        "Hybrid search returned %d results (vector=%d, keyword=%d)",
-        len(fused),
-        len(vector_results),
-        len(keyword_results),
-    )
-    return fused[:top_k]
+    candidates = fused[:candidate_k]
+
+    if not candidates or not rerank:
+        return candidates[:top_k]
+
+    try:
+        reranker = get_reranker()
+        passages = [c["text"] for c in candidates]
+        ranked = await reranker.rerank(query, passages, top_k=top_k)
+        logger.info("Reranked %d candidates to top %d", len(candidates), len(ranked))
+        return [
+            {
+                **candidates[idx],
+                "score": round(score, 6),
+            }
+            for idx, score in ranked
+        ]
+    except Exception as e:
+        logger.warning("Reranking failed: %s. Returning fused results.", e)
+        return candidates[:top_k]

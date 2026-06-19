@@ -67,6 +67,7 @@ async def answer_question(
     document_id: Optional[str] = None,
     score_threshold: Optional[float] = 0.5,
     session: Optional[AsyncSession] = None,
+    rerank: bool = True,
 ) -> RAGAnswer:
     """Run the full RAG pipeline.
 
@@ -76,6 +77,7 @@ async def answer_question(
         document_id: Optional document filter.
         score_threshold: Minimum vector similarity score.
         session: Optional database session for keyword/hybrid search.
+        rerank: Whether to apply the configured reranker.
 
     Returns:
         RAGAnswer with generated text and citations.
@@ -89,6 +91,7 @@ async def answer_question(
         document_id=document_id,
         score_threshold=score_threshold,
         session=session,
+        rerank=rerank,
     )
 
     logger.info("Retrieved %d chunks for query", len(results))

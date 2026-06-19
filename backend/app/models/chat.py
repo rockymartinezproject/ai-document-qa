@@ -24,6 +24,10 @@ class ChatRequest(BaseModel):
         default="hybrid",
         description="Retrieval mode: semantic, keyword, or hybrid",
     )
+    rerank: bool = Field(
+        default=True,
+        description="Apply configured reranker to retrieved chunks",
+    )
     conversation_id: Optional[str] = Field(
         default=None,
         description="Existing conversation ID (creates new thread if omitted)",

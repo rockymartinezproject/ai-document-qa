@@ -58,6 +58,7 @@ async def ask_question(
             document_id=body.document_id,
             score_threshold=body.score_threshold,
             session=session,
+            rerank=body.rerank,
         )
     except Exception as e:
         logger.error("RAG pipeline failed: %s", e)

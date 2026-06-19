@@ -215,12 +215,13 @@ export const api = {
       query: string,
       top_k = 5,
       document_id?: string,
-      search_type: "semantic" | "keyword" | "hybrid" = "hybrid"
+      search_type: "semantic" | "keyword" | "hybrid" = "hybrid",
+      rerank = true
     ) => {
       return request<SearchResponse>("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, top_k, document_id, search_type }),
+        body: JSON.stringify({ query, top_k, document_id, search_type, rerank }),
       });
     },
     syncDocument: (documentId: string) => {
@@ -235,12 +236,13 @@ export const api = {
       query: string,
       conversation_id?: string,
       document_id?: string,
-      search_type: "semantic" | "keyword" | "hybrid" = "hybrid"
+      search_type: "semantic" | "keyword" | "hybrid" = "hybrid",
+      rerank = true
     ) => {
       return request<ChatResponse>("/api/chat/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, conversation_id, document_id, search_type }),
+        body: JSON.stringify({ query, conversation_id, document_id, search_type, rerank }),
       });
     },
   },

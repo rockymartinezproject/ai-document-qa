@@ -29,6 +29,10 @@ class SearchRequest(BaseModel):
         le=200,
         description="Reciprocal rank fusion constant",
     )
+    rerank: bool = Field(
+        default=True,
+        description="Apply configured reranker to fused results",
+    )
 
 
 class SearchResult(BaseModel):
