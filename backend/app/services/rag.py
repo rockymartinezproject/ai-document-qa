@@ -1,7 +1,8 @@
 """
-RAG pipeline: retrieve relevant chunks and generate cited answers.
+RAG pipeline: retrieve relevant chunks, generate cited answers, and validate citations.
 """
 
+import re
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -13,6 +14,8 @@ from app.services.hybrid_search import hybrid_search
 from app.services.llm import get_llm_provider
 
 logger = get_logger("rag")
+
+_CITATION_RE = re.compile(r"\[(\d+)\]")
 
 
 @dataclass
@@ -38,7 +41,7 @@ class RAGAnswer:
 
 RAG_SYSTEM_PROMPT = """You are a precise document assistant. Answer the user's question using ONLY the provided context.
 If the context does not contain enough information, say "I don't have enough information to answer that."
-Do not make up facts. Include citations in your answer like [1], [2], etc."""
+Do not make up facts. Cite your sources inline using [1], [2], etc., matching the numbered context chunks."""
 
 
 def _build_prompt(query: str, contexts: List[dict]) -> str:
@@ -46,8 +49,9 @@ def _build_prompt(query: str, contexts: List[dict]) -> str:
     context_blocks = []
     for i, ctx in enumerate(contexts, start=1):
         source = ctx.get("source", "Unknown source")
+        index = ctx.get("index", 0)
         text = ctx.get("text", "").strip()
-        context_blocks.append(f"[{i}] Source: {source}\n{text}")
+        context_blocks.append(f"[{i}] Source: {source} (chunk {index})\n{text}")
 
     context_text = "\n\n".join(context_blocks)
 
@@ -59,6 +63,41 @@ Context:
 Question: {query}
 
 Answer:"""
+
+
+def _parse_and_renumber_citations(
+    answer: str, contexts: List[dict]
+) -> tuple[str, List[dict]]:
+    """Validate citation markers, renumber them in answer order, and return cited contexts.
+
+    Invalid markers (out of range) are replaced with [?]. If no valid markers are found,
+    the original answer and all contexts are returned as a fallback.
+    """
+    if not contexts:
+        return answer, []
+
+    matches = list(_CITATION_RE.finditer(answer))
+    original_to_new: dict[int, int] = {}
+    next_num = 1
+
+    for m in matches:
+        idx = int(m.group(1)) - 1
+        if 0 <= idx < len(contexts) and idx not in original_to_new:
+            original_to_new[idx] = next_num
+            next_num += 1
+
+    if not original_to_new:
+        # No valid citations found; keep original answer and all contexts.
+        return answer, contexts
+
+    def _replace_marker(m: re.Match) -> str:
+        idx = int(m.group(1)) - 1
+        new_num = original_to_new.get(idx)
+        return f"[{new_num}]" if new_num is not None else "[?]"
+
+    renumbered_answer = _CITATION_RE.sub(_replace_marker, answer)
+    cited_contexts = [contexts[idx] for idx in original_to_new.keys()]
+    return renumbered_answer, cited_contexts
 
 
 async def answer_question(
@@ -80,7 +119,7 @@ async def answer_question(
         rerank: Whether to apply the configured reranker.
 
     Returns:
-        RAGAnswer with generated text and citations.
+        RAGAnswer with generated text and validated citations.
     """
     logger.info("RAG query: %s", query)
 
@@ -103,7 +142,18 @@ async def answer_question(
             provider=get_embedding_provider().name,
         )
 
-    # 2. Build citations
+    # 2. Generate answer with LLM
+    llm_provider = get_llm_provider()
+    prompt = _build_prompt(query, results)
+    answer = await llm_provider.generate(
+        prompt=prompt,
+        system_message=RAG_SYSTEM_PROMPT,
+        temperature=0.3,
+    )
+
+    # 3. Validate and renumber citations, keeping only cited sources
+    answer, cited_results = _parse_and_renumber_citations(answer, results)
+
     citations = [
         Citation(
             chunk_id=r["id"],
@@ -113,17 +163,8 @@ async def answer_question(
             text=r["text"],
             score=r["score"],
         )
-        for r in results
+        for r in cited_results
     ]
-
-    # 3. Generate answer with LLM
-    llm_provider = get_llm_provider()
-    prompt = _build_prompt(query, results)
-    answer = await llm_provider.generate(
-        prompt=prompt,
-        system_message=RAG_SYSTEM_PROMPT,
-        temperature=0.3,
-    )
 
     return RAGAnswer(
         answer=answer,

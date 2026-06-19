@@ -128,7 +128,7 @@ export function MessageBubble({ message }: { message: Message }) {
                   className="text-xs text-zinc-600 dark:text-zinc-400"
                 >
                   <span className="font-medium text-zinc-900 dark:text-zinc-200">
-                    [{idx + 1}] {c.source}
+                    [{idx + 1}] {c.source} · chunk {c.index}
                   </span>
                   <span className="ml-2 text-zinc-400 dark:text-zinc-600">
                     score: {c.score.toFixed(3)}
