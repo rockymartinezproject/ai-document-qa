@@ -112,6 +112,18 @@ export interface ChatResponse {
   conversation_id: string;
 }
 
+export type ChatStreamEvent =
+  | { type: "citations"; citations: Citation[]; request_id?: string }
+  | { type: "token"; token: string; request_id?: string }
+  | {
+      type: "done";
+      answer: string;
+      citations: Citation[];
+      provider: string;
+      request_id?: string;
+    }
+  | { type: "error"; message: string; request_id?: string };
+
 export interface Conversation {
   id: string;
   title?: string;
@@ -176,6 +188,57 @@ async function request<T>(
   const body: APIResponse<T> = await res.json();
   body.request_id = body.request_id || requestId;
   return body;
+}
+
+export async function* askStream(
+  query: string,
+  conversation_id?: string,
+  document_id?: string,
+  search_type: "semantic" | "keyword" | "hybrid" = "hybrid",
+  rerank = true
+): AsyncGenerator<ChatStreamEvent> {
+  const url = `${API_BASE}/api/chat/stream`;
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ query, conversation_id, document_id, search_type, rerank }),
+  });
+
+  if (!res.ok) {
+    let detail = "Unknown error";
+    try {
+      const body = await res.json();
+      detail = body.detail || JSON.stringify(body);
+    } catch {
+      detail = await res.text().catch(() => "Unknown error");
+    }
+    throw new APIError(`HTTP ${res.status}: ${detail}`, res.status);
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new APIError("No response body", 0);
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() || "";
+    for (const line of lines) {
+      if (line.startsWith("data: ")) {
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") return;
+        if (data) {
+          yield JSON.parse(data) as ChatStreamEvent;
+        }
+      }
+    }
+  }
 }
 
 export const api = {

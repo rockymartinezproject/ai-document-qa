@@ -2,8 +2,10 @@
 LLM provider abstraction: OpenAI, Anthropic, Ollama, and mock fallback.
 """
 
+import asyncio
+import json
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import AsyncIterator, Optional
 
 import httpx
 
@@ -37,6 +39,19 @@ class LLMProvider(ABC):
         """
         ...
 
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_message: Optional[str] = None,
+        temperature: float = 0.3,
+    ) -> AsyncIterator[str]:
+        """Stream generated text tokens.
+
+        Default implementation yields the full response as a single chunk.
+        Providers that support true streaming should override this.
+        """
+        yield await self.generate(prompt, system_message, temperature)
+
 
 class OpenAIProvider(LLMProvider):
     """OpenAI GPT provider."""
@@ -68,6 +83,29 @@ class OpenAIProvider(LLMProvider):
         )
         return response.choices[0].message.content or ""
 
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_message: Optional[str] = None,
+        temperature: float = 0.3,
+    ) -> AsyncIterator[str]:
+        messages = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": prompt})
+
+        logger.info("Streaming OpenAI model=%s", self._model)
+        stream = await self._client.chat.completions.create(
+            model=self._model,
+            messages=messages,
+            temperature=temperature,
+            stream=True,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                yield delta
+
 
 class AnthropicProvider(LLMProvider):
     """Anthropic Claude provider."""
@@ -95,6 +133,23 @@ class AnthropicProvider(LLMProvider):
             messages=[{"role": "user", "content": prompt}],
         )
         return response.content[0].text if response.content else ""
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_message: Optional[str] = None,
+        temperature: float = 0.3,
+    ) -> AsyncIterator[str]:
+        logger.info("Streaming Anthropic model=%s", self._model)
+        async with self._client.messages.stream(
+            model=self._model,
+            max_tokens=1024,
+            temperature=temperature,
+            system=system_message or "You are a helpful assistant.",
+            messages=[{"role": "user", "content": prompt}],
+        ) as stream:
+            async for text in stream.text_stream:
+                yield text
 
 
 class OllamaProvider(LLMProvider):
@@ -129,6 +184,40 @@ class OllamaProvider(LLMProvider):
             data = response.json()
             return data.get("response", "")
 
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_message: Optional[str] = None,
+        temperature: float = 0.3,
+    ) -> AsyncIterator[str]:
+        logger.info("Streaming Ollama model=%s at %s", self._model, self._base_url)
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST",
+                f"{self._base_url}/api/generate",
+                json={
+                    "model": self._model,
+                    "prompt": prompt,
+                    "system": system_message or "You are a helpful assistant.",
+                    "stream": True,
+                    "options": {"temperature": temperature},
+                },
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        data = json.loads(line)
+                    except Exception:
+                        continue
+                    token = data.get("response", "")
+                    if token:
+                        yield token
+                    if data.get("done"):
+                        break
+
 
 class MockProvider(LLMProvider):
     """Mock provider for testing without API keys.
@@ -160,6 +249,21 @@ class MockProvider(LLMProvider):
             )
 
         return "[Mock LLM] This is a placeholder response. Configure an LLM API key for real answers."
+
+    async def generate_stream(
+        self,
+        prompt: str,
+        system_message: Optional[str] = None,
+        temperature: float = 0.3,
+    ) -> AsyncIterator[str]:
+        logger.info("Streaming mock LLM provider")
+
+        full = await self.generate(prompt, system_message, temperature)
+        # Stream word-by-word so the frontend can render progressively
+        words = full.split(" ")
+        for i, word in enumerate(words):
+            yield word if i == 0 else f" {word}"
+            await asyncio.sleep(0.01)
 
 
 # Singleton provider instance
