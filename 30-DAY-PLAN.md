@@ -77,4 +77,21 @@ Day 8: Add Qdrant vector database integration
 
 ---
 
+## Running Locally (Day 1+)
 
+```bash
+# Backend
+cd backend
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload
+
+# Frontend
+cd frontend
+npm install
+npm run dev
+
+# Full stack with Docker
+docker-compose up --build
+```
