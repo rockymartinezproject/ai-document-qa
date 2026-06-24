@@ -8,6 +8,7 @@ import { LoadingSpinner } from "@/components/Loading";
 interface MessageThreadProps {
   messages: Message[];
   isLoading: boolean;
+  isStreaming?: boolean;
   error: string | null;
   bottomRef: RefObject<HTMLDivElement | null>;
 }
@@ -15,13 +16,14 @@ interface MessageThreadProps {
 export function MessageThread({
   messages,
   isLoading,
+  isStreaming,
   error,
   bottomRef,
 }: MessageThreadProps) {
   return (
     <div className="flex-1 overflow-y-auto px-6 py-8">
       <div className="mx-auto max-w-3xl space-y-6">
-        {messages.length === 0 && !isLoading && (
+        {messages.length === 0 && !isLoading && !isStreaming && (
           <div className="flex gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/30">
               <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
@@ -39,7 +41,18 @@ export function MessageThread({
           <MessageBubble key={i} message={msg} />
         ))}
 
-        {isLoading && (
+        {isStreaming && (
+          <div className="flex gap-3">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/30">
+              <LoadingSpinner size="sm" />
+            </div>
+            <div className="rounded-2xl bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-4 py-3 text-sm">
+              <span className="inline-block h-4 w-0.5 animate-pulse bg-indigo-600 dark:bg-indigo-400" />
+            </div>
+          </div>
+        )}
+
+        {isLoading && !isStreaming && (
           <div className="flex gap-3">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-900/30">
               <LoadingSpinner size="sm" />

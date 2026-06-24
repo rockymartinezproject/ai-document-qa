@@ -7,6 +7,8 @@ interface ChatInputProps {
   onChange: (value: string) => void;
   onSubmit: (e?: FormEvent) => void;
   isLoading: boolean;
+  isStreaming?: boolean;
+  onStop?: () => void;
 }
 
 export function ChatInput({
@@ -14,12 +16,10 @@ export function ChatInput({
   onChange,
   onSubmit,
   isLoading,
+  isStreaming,
+  onStop,
 }: ChatInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    textareaRef.current?.focus();
-  }, []);
 
   useEffect(() => {
     const el = textareaRef.current;
@@ -27,12 +27,6 @@ export function ChatInput({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
   }, [value]);
-
-  useEffect(() => {
-    if (!isLoading) {
-      textareaRef.current?.focus();
-    }
-  }, [isLoading]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -59,13 +53,23 @@ export function ChatInput({
           rows={1}
           className="flex-1 resize-none overflow-hidden rounded-lg border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-4 py-2.5 text-sm text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
         />
-        <button
-          type="submit"
-          disabled={isLoading || !value.trim()}
-          className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600"
-        >
-          Send
-        </button>
+        {isStreaming ? (
+          <button
+            type="button"
+            onClick={onStop}
+            className="rounded-lg border border-zinc-300 dark:border-zinc-700 px-4 py-2.5 text-sm font-semibold text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            Stop
+          </button>
+        ) : (
+          <button
+            type="submit"
+            disabled={isLoading || !value.trim()}
+            className="rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 disabled:hover:bg-indigo-600"
+          >
+            Send
+          </button>
+        )}
       </form>
     </div>
   );

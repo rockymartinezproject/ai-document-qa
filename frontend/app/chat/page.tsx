@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api, ChatMessage, Conversation } from "@/lib/api";
+import { api, askStream, ChatMessage, Conversation } from "@/lib/api";
 import {
   ChatInput,
   ChatSidebar,
@@ -16,10 +16,11 @@ export default function ChatPage() {
   >();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const loadConversations = async () => {
     try {
@@ -91,43 +92,110 @@ export default function ChatPage() {
     }
   };
 
+  const handleStop = () => {
+    abortControllerRef.current?.abort();
+    abortControllerRef.current = null;
+    setIsStreaming(false);
+  };
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isStreaming) return;
 
     const question = input.trim();
     const now = new Date().toISOString();
     setInput("");
     setError(null);
+
+    const conversationIdBefore = activeConversationId;
     setMessages((prev) => [
       ...prev,
       { role: "user", content: question, created_at: now },
+      {
+        role: "assistant",
+        content: "",
+        citations: [],
+        provider: "unknown",
+        created_at: now,
+      },
     ]);
-    setIsLoading(true);
+    setIsStreaming(true);
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
 
     try {
-      const res = await api.chat.ask(question, activeConversationId);
-      const data = res.data!;
+      const stream = askStream(
+        question,
+        activeConversationId,
+        undefined,
+        "hybrid",
+        true,
+        controller.signal
+      );
 
-      if (!activeConversationId) {
-        setActiveConversationId(data.conversation_id);
-        await loadConversations();
+      for await (const event of stream) {
+        if (event.type === "citations") {
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last && last.role === "assistant") {
+              next[next.length - 1] = {
+                ...last,
+                citations: event.citations,
+              };
+            }
+            return next;
+          });
+        } else if (event.type === "token") {
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last && last.role === "assistant") {
+              next[next.length - 1] = {
+                ...last,
+                content: last.content + event.token,
+              };
+            }
+            return next;
+          });
+        } else if (event.type === "done") {
+          setMessages((prev) => {
+            const next = [...prev];
+            const last = next[next.length - 1];
+            if (last && last.role === "assistant") {
+              next[next.length - 1] = {
+                ...last,
+                content: event.answer,
+                citations: event.citations,
+                provider: event.provider,
+                created_at: new Date().toISOString(),
+              };
+            }
+            return next;
+          });
+        } else if (event.type === "error") {
+          setError(event.message);
+        }
       }
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: data.answer,
-          citations: data.citations,
-          provider: data.provider,
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      if (!conversationIdBefore) {
+        const listRes = await api.conversations.list();
+        const list = listRes.data || [];
+        setConversations(list);
+        if (list[0]) {
+          setActiveConversationId(list[0].id);
+        }
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to get answer");
+      if (e instanceof Error && e.name === "AbortError") {
+        // User stopped the stream; partial answer is already rendered.
+      } else {
+        setError(e instanceof Error ? e.message : "Failed to get answer");
+      }
     } finally {
-      setIsLoading(false);
+      setIsStreaming(false);
+      abortControllerRef.current = null;
     }
   };
 
@@ -154,7 +222,8 @@ export default function ChatPage() {
 
         <MessageThread
           messages={messages}
-          isLoading={isLoading}
+          isLoading={false}
+          isStreaming={isStreaming}
           error={error}
           bottomRef={bottomRef}
         />
@@ -163,7 +232,9 @@ export default function ChatPage() {
           value={input}
           onChange={setInput}
           onSubmit={handleSubmit}
-          isLoading={isLoading}
+          isLoading={isStreaming}
+          isStreaming={isStreaming}
+          onStop={handleStop}
         />
       </div>
     </div>

@@ -195,13 +195,15 @@ export async function* askStream(
   conversation_id?: string,
   document_id?: string,
   search_type: "semantic" | "keyword" | "hybrid" = "hybrid",
-  rerank = true
+  rerank = true,
+  signal?: AbortSignal
 ): AsyncGenerator<ChatStreamEvent> {
   const url = `${API_BASE}/api/chat/stream`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ query, conversation_id, document_id, search_type, rerank }),
+    signal,
   });
 
   if (!res.ok) {
