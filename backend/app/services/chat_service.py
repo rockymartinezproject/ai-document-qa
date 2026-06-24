@@ -8,6 +8,7 @@ from typing import List, Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.models import Conversation, Message
 from app.services.rag import Citation
@@ -75,8 +76,10 @@ async def list_conversations(
 async def get_conversation_with_messages(
     session: AsyncSession,
     conversation_id: str,
+    limit: int = 100,
+    offset: int = 0,
 ) -> Optional[tuple[Conversation, List[Message]]]:
-    """Get a conversation and all its messages."""
+    """Get a conversation and a paginated slice of its messages."""
     conv_result = await session.execute(
         select(Conversation).where(Conversation.id == conversation_id)
     )
@@ -88,6 +91,8 @@ async def get_conversation_with_messages(
         select(Message)
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at)
+        .offset(offset)
+        .limit(limit)
     )
     messages = msg_result.scalars().all()
 
@@ -110,12 +115,16 @@ async def count_messages(
 async def get_messages(
     session: AsyncSession,
     conversation_id: str,
+    limit: int = 100,
+    offset: int = 0,
 ) -> List[Message]:
-    """Get all messages for a conversation."""
+    """Get paginated messages for a conversation."""
     result = await session.execute(
         select(Message)
         .where(Message.conversation_id == conversation_id)
         .order_by(Message.created_at)
+        .offset(offset)
+        .limit(limit)
     )
     return result.scalars().all()
 
@@ -135,6 +144,47 @@ async def update_conversation_title(
         await session.commit()
         await session.refresh(conversation)
     return conversation
+
+
+async def generate_conversation_title(
+    session: AsyncSession,
+    conversation: Conversation,
+    query: str,
+    answer: str,
+) -> Optional[str]:
+    """Generate a concise title for a conversation after the first exchange.
+
+    Falls back to a truncated query if title generation is disabled or fails.
+    """
+    if not settings.AUTO_TITLE_ENABLED:
+        return None
+    if conversation.title and conversation.title != "New Chat":
+        return None
+
+    from app.services.llm import get_llm_provider
+
+    provider = get_llm_provider()
+    prompt = (
+        "Create a concise, 4-6 word title for the following chat question and answer. "
+        "Reply with ONLY the title, no quotes or punctuation.\n\n"
+        f"Question: {query}\n"
+        f"Answer: {answer[:500]}"
+    )
+
+    try:
+        title = await provider.generate(
+            prompt=prompt,
+            system_message="You are a helpful assistant that creates short chat titles.",
+            temperature=0.3,
+        )
+        title = title.strip().strip('"').strip("'")
+        if title and len(title) > 2:
+            return title
+    except Exception as e:
+        logger.warning("Failed to generate conversation title: %s", e)
+
+    # Fallback to truncated query
+    return query[:50] + "..." if len(query) > 50 else query
 
 
 async def delete_conversation(

@@ -88,3 +88,7 @@ class ConversationDetailOut(BaseModel):
 
 class CreateConversationRequest(BaseModel):
     title: Optional[str] = None
+
+
+class UpdateConversationRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=512, description="New conversation title")

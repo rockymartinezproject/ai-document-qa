@@ -321,7 +321,15 @@ export const api = {
         body: JSON.stringify({ title }),
       });
     },
-    get: (id: string) => request<ConversationDetail>(`/api/conversations/${id}`),
+    get: (id: string, limit = 100, offset = 0) =>
+      request<ConversationDetail>(`/api/conversations/${id}?limit=${limit}&offset=${offset}`),
+    update: (id: string, title: string) => {
+      return request<Conversation>(`/api/conversations/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+    },
     delete: (id: string) =>
       request<{ deleted: boolean }>(`/api/conversations/${id}`, {
         method: "DELETE",

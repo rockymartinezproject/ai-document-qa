@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     DEFAULT_LLM_MODEL: str = "gpt-4o"
     LOCAL_LLM_URL: str = "http://localhost:11434"
 
+    # Conversations
+    AUTO_TITLE_ENABLED: bool = True
+
     # Reranking
     RERANK_ENABLED: bool = True
     RERANK_PROVIDER: str = "cross_encoder"  # cross_encoder | cohere | none

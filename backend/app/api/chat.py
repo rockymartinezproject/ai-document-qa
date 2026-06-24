@@ -10,13 +10,44 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
 from app.db.base import get_db
+from app.db.models import Conversation
 from app.models.chat import ChatRequest, ChatResponse
 from app.models.response import APIResponse
-from app.services.chat_service import add_message, get_or_create_conversation
+from app.services.chat_service import (
+    add_message,
+    generate_conversation_title,
+    get_or_create_conversation,
+    update_conversation_title,
+)
 from app.services.rag import answer_question, answer_question_stream
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 logger = get_logger("chat_api")
+
+
+async def _maybe_update_title(
+    session: AsyncSession,
+    conversation: Conversation,
+    query: str,
+    answer: str,
+) -> None:
+    """Generate and set a concise title for a new conversation."""
+    try:
+        title = await generate_conversation_title(
+            session=session,
+            conversation=conversation,
+            query=query,
+            answer=answer,
+        )
+        if title:
+            await update_conversation_title(
+                session=session,
+                conversation_id=conversation.id,
+                title=title,
+            )
+            conversation.title = title
+    except Exception as e:
+        logger.warning("Failed to update conversation title: %s", e)
 
 
 @router.post("/ask", response_model=APIResponse[ChatResponse])
@@ -76,6 +107,8 @@ async def ask_question(
         citations=result.citations,
         provider=result.provider,
     )
+
+    await _maybe_update_title(session, conversation, body.query, result.answer)
 
     data = ChatResponse(
         answer=result.answer,
@@ -175,6 +208,12 @@ async def stream_answer(
                     provider=provider,
                 )
                 await session.commit()
+                await _maybe_update_title(
+                    session=session,
+                    conversation=conversation,
+                    query=body.query,
+                    answer=answer_to_save,
+                )
             except Exception as save_err:
                 logger.error("Failed to persist streamed assistant message: %s", save_err)
 
