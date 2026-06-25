@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api, askStream, ChatMessage, Conversation } from "@/lib/api";
 import {
   ChatInput,
@@ -10,6 +11,7 @@ import {
 } from "@/components/chat";
 
 export default function ChatPage() {
+  const searchParams = useSearchParams();
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<
     string | undefined
@@ -21,8 +23,9 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const restoredFromUrl = useRef(false);
 
-  const loadConversations = async () => {
+  const loadConversations = useCallback(async () => {
     try {
       const res = await api.conversations.list();
       setConversations(res.data || []);
@@ -31,15 +34,7 @@ export default function ChatPage() {
     } finally {
       setIsLoadingConversations(false);
     }
-  };
-
-  useEffect(() => {
-    loadConversations();
   }, []);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   const startNewChat = async () => {
     try {
@@ -91,6 +86,50 @@ export default function ChatPage() {
       console.error(err);
     }
   };
+
+  const renameConversation = async (id: string, title: string) => {
+    try {
+      await api.conversations.update(id, title);
+      setConversations((prev) =>
+        prev.map((c) => (c.id === id ? { ...c, title } : c))
+      );
+    } catch (err) {
+      console.error(err);
+      setError(
+        err instanceof Error ? err.message : "Failed to rename conversation"
+      );
+    }
+  };
+
+  useEffect(() => {
+    loadConversations();
+  }, [loadConversations]);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Restore active conversation from URL query param on mount
+  useEffect(() => {
+    if (restoredFromUrl.current) return;
+    const idFromUrl = searchParams.get("conversationId");
+    if (idFromUrl) {
+      restoredFromUrl.current = true;
+      selectConversation(idFromUrl);
+    }
+  }, [searchParams]);
+
+  // Sync active conversation to URL for persistent sessions
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (activeConversationId) {
+      url.searchParams.set("conversationId", activeConversationId);
+    } else {
+      url.searchParams.delete("conversationId");
+    }
+    window.history.replaceState({}, "", url.toString());
+  }, [activeConversationId]);
 
   const handleStop = () => {
     abortControllerRef.current?.abort();
@@ -208,6 +247,7 @@ export default function ChatPage() {
         onNewChat={startNewChat}
         onSelect={selectConversation}
         onDelete={deleteConversation}
+        onRename={renameConversation}
       />
 
       <div className="flex flex-1 flex-col">
