@@ -18,10 +18,13 @@ from app.models.chat import (
     UpdateConversationRequest,
 )
 from app.models.response import APIResponse
+from app.models.usage import ConversationUsageResponse, UsageRecordOut
 from app.services.chat_service import (
     count_messages,
     delete_conversation,
+    get_conversation_usage_totals,
     get_conversation_with_messages,
+    get_usage_by_conversation,
     list_conversations,
     update_conversation_title,
 )
@@ -169,6 +172,45 @@ async def rename_conversation(
             updated_at=conversation.updated_at,
             message_count=msg_count,
         ),
+        request_id=request_id,
+    )
+
+
+@router.get("/{conversation_id}/usage", response_model=APIResponse[ConversationUsageResponse])
+async def conversation_usage(
+    request: Request,
+    conversation_id: str,
+    session: AsyncSession = Depends(get_db),
+):
+    """Return usage and cost records for a conversation."""
+    request_id = getattr(request.state, "request_id", None)
+
+    records = await get_usage_by_conversation(session, conversation_id)
+    totals = await get_conversation_usage_totals(session, conversation_id)
+
+    data = ConversationUsageResponse(
+        conversation_id=conversation_id,
+        total_input_tokens=totals["input_tokens"],
+        total_output_tokens=totals["output_tokens"],
+        total_cost=totals["cost"],
+        records=[
+            UsageRecordOut(
+                id=r.id,
+                conversation_id=r.conversation_id,
+                message_id=r.message_id,
+                model=r.model,
+                input_tokens=r.input_tokens,
+                output_tokens=r.output_tokens,
+                cost=r.cost,
+                created_at=r.created_at,
+            )
+            for r in records
+        ],
+    )
+
+    return APIResponse(
+        success=True,
+        data=data,
         request_id=request_id,
     )
 

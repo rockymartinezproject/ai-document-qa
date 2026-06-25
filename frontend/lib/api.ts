@@ -95,6 +95,31 @@ export interface SyncDocumentResponse {
   message: string;
 }
 
+export interface UsageRecord {
+  id: string;
+  conversation_id: string;
+  message_id?: string;
+  model: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost: number;
+  created_at: string;
+}
+
+export interface ConversationUsageResponse {
+  conversation_id: string;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cost: number;
+  records: UsageRecord[];
+}
+
+export interface TotalUsageResponse {
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cost: number;
+}
+
 export interface Citation {
   chunk_id: string;
   document_id: string;
@@ -334,6 +359,12 @@ export const api = {
       request<{ deleted: boolean }>(`/api/conversations/${id}`, {
         method: "DELETE",
       }),
+    usage: (id: string) =>
+      request<ConversationUsageResponse>(`/api/conversations/${id}/usage`),
+  },
+
+  usage: {
+    total: () => request<TotalUsageResponse>("/api/usage"),
   },
 };
 

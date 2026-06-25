@@ -19,6 +19,7 @@ class LLMProvider(ABC):
     """Abstract base for LLM providers."""
 
     name: str = "unknown"
+    model: str = "unknown"
 
     @abstractmethod
     async def generate(
@@ -57,6 +58,7 @@ class OpenAIProvider(LLMProvider):
     """OpenAI GPT provider."""
 
     name = "openai"
+    model = settings.DEFAULT_LLM_MODEL
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         import openai
@@ -111,6 +113,7 @@ class AnthropicProvider(LLMProvider):
     """Anthropic Claude provider."""
 
     name = "anthropic"
+    model = "claude-3-5-sonnet-20241022"
 
     def __init__(self, api_key: Optional[str] = None, model: str = "claude-3-5-sonnet-20241022"):
         import anthropic
@@ -156,6 +159,7 @@ class OllamaProvider(LLMProvider):
     """Local LLM via Ollama."""
 
     name = "ollama"
+    model = "llama3.2"
 
     def __init__(self, base_url: Optional[str] = None, model: str = "llama3.2"):
         self._base_url = base_url or settings.LOCAL_LLM_URL
@@ -226,6 +230,7 @@ class MockProvider(LLMProvider):
     """
 
     name = "mock"
+    model = "mock"
 
     async def generate(
         self,

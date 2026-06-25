@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import chat, chunks, conversations, documents, embeddings, health, search
+from app.api import chat, chunks, conversations, documents, embeddings, health, search, usage
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.base import engine
@@ -57,6 +57,7 @@ app.include_router(embeddings.router, prefix="/api", tags=["Embeddings"])
 app.include_router(search.router, prefix="/api", tags=["Search"])
 app.include_router(chat.router, prefix="/api", tags=["Chat"])
 app.include_router(conversations.router, prefix="/api", tags=["Conversations"])
+app.include_router(usage.router, prefix="/api", tags=["Usage"])
 
 
 @app.get("/")

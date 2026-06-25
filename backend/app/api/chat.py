@@ -17,12 +17,34 @@ from app.services.chat_service import (
     add_message,
     generate_conversation_title,
     get_or_create_conversation,
+    record_usage,
     update_conversation_title,
 )
-from app.services.rag import answer_question, answer_question_stream
+from app.services.cost_tracker import count_tokens, estimate_cost
+from app.services.llm import get_llm_provider
+from app.services.rag import (
+    RAG_SYSTEM_PROMPT,
+    _build_prompt,
+    answer_question,
+    answer_question_stream,
+)
 
 router = APIRouter(prefix="/chat", tags=["Chat"])
 logger = get_logger("chat_api")
+
+
+def _count_request_cost(
+    query: str,
+    answer: str,
+    contexts: list,
+    model: str,
+) -> tuple[int, int, float]:
+    """Count input/output tokens and estimate cost for a request."""
+    prompt = _build_prompt(query, contexts)
+    input_tokens = count_tokens(prompt, model) + count_tokens(RAG_SYSTEM_PROMPT, model)
+    output_tokens = count_tokens(answer, model)
+    cost = estimate_cost(input_tokens, output_tokens, model)
+    return input_tokens, output_tokens, cost
 
 
 async def _maybe_update_title(
@@ -99,13 +121,30 @@ async def ask_question(
         raise HTTPException(status_code=500, detail=f"RAG pipeline failed: {str(e)}")
 
     # Save assistant message
-    await add_message(
+    assistant_message = await add_message(
         session=session,
         conversation_id=conversation.id,
         role="assistant",
         content=result.answer,
         citations=result.citations,
         provider=result.provider,
+    )
+
+    llm_provider = get_llm_provider()
+    input_tokens, output_tokens, cost = _count_request_cost(
+        query=body.query,
+        answer=result.answer,
+        contexts=[c.__dict__ for c in result.citations],
+        model=llm_provider.model,
+    )
+    await record_usage(
+        session=session,
+        conversation_id=conversation.id,
+        message_id=assistant_message.id,
+        model=llm_provider.model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost=cost,
     )
 
     await _maybe_update_title(session, conversation, body.query, result.answer)
@@ -199,7 +238,7 @@ async def stream_answer(
         finally:
             answer_to_save = final_answer or full_answer
             try:
-                await add_message(
+                assistant_message = await add_message(
                     session=session,
                     conversation_id=conversation.id,
                     role="assistant",
@@ -208,6 +247,24 @@ async def stream_answer(
                     provider=provider,
                 )
                 await session.commit()
+
+                llm_provider = get_llm_provider()
+                input_tokens, output_tokens, cost = _count_request_cost(
+                    query=body.query,
+                    answer=answer_to_save,
+                    contexts=[c.__dict__ for c in citations],
+                    model=llm_provider.model,
+                )
+                await record_usage(
+                    session=session,
+                    conversation_id=conversation.id,
+                    message_id=assistant_message.id,
+                    model=llm_provider.model,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    cost=cost,
+                )
+
                 await _maybe_update_title(
                     session=session,
                     conversation=conversation,

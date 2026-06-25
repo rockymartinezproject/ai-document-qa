@@ -5,7 +5,7 @@ SQLAlchemy models for persistent entities.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
 
 from app.db.base import Base
 
@@ -27,6 +27,25 @@ class Document(Base):
     extracted_text = Column(Text, nullable=True)
     status = Column(String(32), default="pending", nullable=False)
     error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=now_utc, nullable=False)
+
+
+class UsageRecord(Base):
+    """Tracks token usage and estimated cost for an assistant response."""
+
+    __tablename__ = "usage_records"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversation_id = Column(
+        String(36), ForeignKey("conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    message_id = Column(
+        String(36), ForeignKey("messages.id", ondelete="SET NULL"), nullable=True
+    )
+    model = Column(String(128), nullable=False)
+    input_tokens = Column(Integer, nullable=False)
+    output_tokens = Column(Integer, nullable=False)
+    cost = Column(Float, nullable=False)
     created_at = Column(DateTime, default=now_utc, nullable=False)
     updated_at = Column(DateTime, default=now_utc, onupdate=now_utc, nullable=False)
 

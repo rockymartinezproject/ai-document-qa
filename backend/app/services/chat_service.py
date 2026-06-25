@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.logging import get_logger
-from app.db.models import Conversation, Message
+from app.db.models import Conversation, Message, UsageRecord
 from app.services.rag import Citation
 
 logger = get_logger("chat_service")
@@ -185,6 +185,86 @@ async def generate_conversation_title(
 
     # Fallback to truncated query
     return query[:50] + "..." if len(query) > 50 else query
+
+
+async def record_usage(
+    session: AsyncSession,
+    conversation_id: str,
+    message_id: Optional[str],
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cost: float,
+) -> UsageRecord:
+    """Persist a usage/cost record for an assistant response."""
+    record = UsageRecord(
+        conversation_id=conversation_id,
+        message_id=message_id,
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost=cost,
+    )
+    session.add(record)
+    await session.commit()
+    await session.refresh(record)
+    return record
+
+
+async def get_usage_by_conversation(
+    session: AsyncSession,
+    conversation_id: str,
+) -> List[UsageRecord]:
+    """Return usage records for a conversation."""
+    records_result = await session.execute(
+        select(UsageRecord)
+        .where(UsageRecord.conversation_id == conversation_id)
+        .order_by(UsageRecord.created_at.desc())
+    )
+    return records_result.scalars().all()
+
+
+async def get_conversation_usage_totals(
+    session: AsyncSession,
+    conversation_id: str,
+) -> dict:
+    """Return aggregated usage totals for a conversation."""
+    from sqlalchemy import func
+
+    result = await session.execute(
+        select(
+            func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
+            func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+            func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
+        ).where(UsageRecord.conversation_id == conversation_id)
+    )
+    row = result.mappings().one()
+    return {
+        "input_tokens": int(row["input_tokens"] or 0),
+        "output_tokens": int(row["output_tokens"] or 0),
+        "cost": float(row["cost"] or 0.0),
+    }
+
+
+async def get_total_usage(
+    session: AsyncSession,
+) -> dict:
+    """Return aggregated usage totals across all conversations."""
+    from sqlalchemy import func
+
+    result = await session.execute(
+        select(
+            func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
+            func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+            func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
+        )
+    )
+    row = result.mappings().one()
+    return {
+        "input_tokens": int(row["input_tokens"] or 0),
+        "output_tokens": int(row["output_tokens"] or 0),
+        "cost": float(row["cost"] or 0.0),
+    }
 
 
 async def delete_conversation(
