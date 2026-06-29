@@ -37,3 +37,21 @@ class TotalUsageResponse(BaseModel):
     total_input_tokens: int
     total_output_tokens: int
     total_cost: float
+
+
+class UsageBreakdownItem(BaseModel):
+    """One row of a usage breakdown."""
+
+    label: str
+    input_tokens: int
+    output_tokens: int
+    cost: float
+    count: int
+
+
+class UsageBreakdownResponse(BaseModel):
+    """Aggregated usage broken down by day, model, or conversation."""
+
+    group_by: str
+    days: Optional[int] = None
+    items: List[UsageBreakdownItem]

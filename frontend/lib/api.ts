@@ -120,6 +120,22 @@ export interface TotalUsageResponse {
   total_cost: number;
 }
 
+export interface UsageBreakdownItem {
+  label: string;
+  input_tokens: number;
+  output_tokens: number;
+  cost: number;
+  count: number;
+}
+
+export interface UsageBreakdownResponse {
+  group_by: "day" | "model" | "conversation";
+  days?: number;
+  items: UsageBreakdownItem[];
+}
+
+export type UsageTimeRange = 7 | 30 | "all";
+
 export interface Citation {
   chunk_id: string;
   document_id: string;
@@ -365,6 +381,13 @@ export const api = {
 
   usage: {
     total: () => request<TotalUsageResponse>("/api/usage"),
+    breakdown: (groupBy: "day" | "model" | "conversation", days?: number | "all") => {
+      const params = new URLSearchParams({ group_by: groupBy });
+      if (days !== undefined && days !== "all") {
+        params.append("days", String(days));
+      }
+      return request<UsageBreakdownResponse>(`/api/usage/breakdown?${params.toString()}`);
+    },
   },
 };
 

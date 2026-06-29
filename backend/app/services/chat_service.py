@@ -267,6 +267,90 @@ async def get_total_usage(
     }
 
 
+async def get_usage_breakdown(
+    session: AsyncSession,
+    group_by: str,
+    days: Optional[int] = None,
+) -> List[dict]:
+    """Return aggregated usage broken down by day, model, or conversation.
+
+    The optional ``days`` parameter filters records to the last N days.
+    """
+    from datetime import datetime, timedelta
+
+    from sqlalchemy import func
+
+    from app.db.models import Conversation
+
+    filters = []
+    if days is not None and days > 0:
+        cutoff = datetime.utcnow() - timedelta(days=days)
+        filters.append(UsageRecord.created_at >= cutoff)
+
+    if group_by == "day":
+        day_col = func.date(UsageRecord.created_at).label("day")
+        query = (
+            select(
+                day_col.label("label"),
+                func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
+                func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+                func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
+                func.coalesce(func.count(UsageRecord.id), 0).label("count"),
+            )
+            .where(*filters)
+            .group_by(day_col)
+            .order_by(day_col)
+        )
+    elif group_by == "model":
+        query = (
+            select(
+                UsageRecord.model.label("label"),
+                func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
+                func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+                func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
+                func.coalesce(func.count(UsageRecord.id), 0).label("count"),
+            )
+            .where(*filters)
+            .group_by(UsageRecord.model)
+            .order_by(func.sum(UsageRecord.cost).desc())
+        )
+    elif group_by == "conversation":
+        query = (
+            select(
+                UsageRecord.conversation_id.label("conversation_id"),
+                func.coalesce(func.max(Conversation.title), UsageRecord.conversation_id).label("label"),
+                func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
+                func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+                func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
+                func.coalesce(func.count(UsageRecord.id), 0).label("count"),
+            )
+            .outerjoin(Conversation, Conversation.id == UsageRecord.conversation_id)
+            .where(*filters)
+            .group_by(UsageRecord.conversation_id)
+            .order_by(func.sum(UsageRecord.cost).desc())
+        )
+    else:
+        raise ValueError(f"Unsupported group_by: {group_by}")
+
+    result = await session.execute(query)
+    rows = []
+    for row in result.mappings().all():
+        label = row["label"]
+        if group_by == "day" and label is not None:
+            label = str(label)
+        rows.append(
+            {
+                "label": label or "unknown",
+                "conversation_id": row.get("conversation_id"),
+                "input_tokens": int(row["input_tokens"] or 0),
+                "output_tokens": int(row["output_tokens"] or 0),
+                "cost": float(row["cost"] or 0.0),
+                "count": int(row["count"] or 0),
+            }
+        )
+    return rows
+
+
 async def delete_conversation(
     session: AsyncSession,
     conversation_id: str,
