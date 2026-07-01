@@ -271,19 +271,103 @@ class MockProvider(LLMProvider):
             await asyncio.sleep(0.01)
 
 
+def create_llm_provider(
+    provider_name: str,
+    model: Optional[str] = None,
+) -> LLMProvider:
+    """Create an LLM provider instance by name and optional model.
+
+    Raises:
+        ValueError: If the provider is unknown or required credentials are missing.
+    """
+    name = provider_name.lower().strip()
+
+    if name == "openai":
+        if not settings.OPENAI_API_KEY:
+            raise ValueError("OpenAI provider requires OPENAI_API_KEY")
+        return OpenAIProvider(
+            api_key=settings.OPENAI_API_KEY,
+            model=model or settings.OPENAI_DEFAULT_MODEL,
+        )
+
+    if name == "anthropic":
+        if not settings.ANTHROPIC_API_KEY:
+            raise ValueError("Anthropic provider requires ANTHROPIC_API_KEY")
+        return AnthropicProvider(
+            api_key=settings.ANTHROPIC_API_KEY,
+            model=model or settings.ANTHROPIC_DEFAULT_MODEL,
+        )
+
+    if name == "ollama":
+        return OllamaProvider(
+            base_url=settings.LOCAL_LLM_URL,
+            model=model or settings.OLLAMA_DEFAULT_MODEL,
+        )
+
+    if name == "mock":
+        return MockProvider()
+
+    raise ValueError(f"Unknown LLM provider: {provider_name}")
+
+
+def list_available_providers() -> list[dict]:
+    """Return metadata for all supported providers."""
+    return [
+        {
+            "name": "openai",
+            "label": "OpenAI",
+            "default_model": settings.OPENAI_DEFAULT_MODEL,
+            "available": bool(settings.OPENAI_API_KEY),
+            "requires_api_key": True,
+        },
+        {
+            "name": "anthropic",
+            "label": "Anthropic",
+            "default_model": settings.ANTHROPIC_DEFAULT_MODEL,
+            "available": bool(settings.ANTHROPIC_API_KEY),
+            "requires_api_key": True,
+        },
+        {
+            "name": "ollama",
+            "label": "Ollama",
+            "default_model": settings.OLLAMA_DEFAULT_MODEL,
+            "available": bool(settings.LOCAL_LLM_URL),
+            "requires_api_key": False,
+        },
+        {
+            "name": "mock",
+            "label": "Mock",
+            "default_model": "mock",
+            "available": True,
+            "requires_api_key": False,
+        },
+    ]
+
+
 # Singleton provider instance
 _provider: Optional[LLMProvider] = None
 
 
 def get_llm_provider() -> LLMProvider:
-    """Return the best available LLM provider.
+    """Return the default LLM provider.
 
-    Priority: OpenAI > Anthropic > Ollama > Mock
+    Uses DEFAULT_LLM_PROVIDER when set to a concrete provider, otherwise falls
+    back to the first available provider by priority: OpenAI > Anthropic >
+    Ollama > Mock.
     """
     global _provider
 
     if _provider is not None:
         return _provider
+
+    default = settings.DEFAULT_LLM_PROVIDER.lower().strip()
+    if default and default != "auto":
+        try:
+            _provider = create_llm_provider(default)
+            logger.info("Using configured LLM provider: %s", default)
+            return _provider
+        except ValueError as e:
+            logger.warning("Configured provider unavailable: %s", e)
 
     if settings.OPENAI_API_KEY:
         logger.info("Using OpenAI LLM provider")

@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.services.embeddings import get_embedding_provider
 from app.services.hybrid_search import hybrid_search
-from app.services.llm import get_llm_provider
+from app.services.llm import create_llm_provider, get_llm_provider
 
 logger = get_logger("rag")
 
@@ -107,6 +107,8 @@ async def answer_question(
     score_threshold: Optional[float] = 0.5,
     session: Optional[AsyncSession] = None,
     rerank: bool = True,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> RAGAnswer:
     """Run the full RAG pipeline.
 
@@ -139,11 +141,11 @@ async def answer_question(
         return RAGAnswer(
             answer="I couldn't find any relevant information in the indexed documents.",
             citations=[],
-            provider=get_embedding_provider().name,
+            provider=provider or get_embedding_provider().name,
         )
 
     # 2. Generate answer with LLM
-    llm_provider = get_llm_provider()
+    llm_provider = create_llm_provider(provider, model) if provider else get_llm_provider()
     prompt = _build_prompt(query, results)
     answer = await llm_provider.generate(
         prompt=prompt,
@@ -180,6 +182,8 @@ async def answer_question_stream(
     score_threshold: Optional[float] = 0.5,
     session: Optional[AsyncSession] = None,
     rerank: bool = True,
+    provider: Optional[str] = None,
+    model: Optional[str] = None,
 ) -> AsyncIterator[Dict[str, Any]]:
     """Stream the RAG pipeline as a series of events.
 
@@ -214,7 +218,7 @@ async def answer_question_stream(
             "type": "done",
             "answer": "I couldn't find any relevant information in the indexed documents.",
             "citations": [],
-            "provider": get_embedding_provider().name,
+            "provider": provider or get_embedding_provider().name,
         }
         return
 
@@ -231,7 +235,7 @@ async def answer_question_stream(
     ]
     yield {"type": "citations", "citations": all_citations}
 
-    llm_provider = get_llm_provider()
+    llm_provider = create_llm_provider(provider, model) if provider else get_llm_provider()
     prompt = _build_prompt(query, results)
     answer_parts: List[str] = []
 

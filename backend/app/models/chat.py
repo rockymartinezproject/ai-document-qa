@@ -32,6 +32,14 @@ class ChatRequest(BaseModel):
         default=None,
         description="Existing conversation ID (creates new thread if omitted)",
     )
+    provider: Optional[str] = Field(
+        default=None,
+        description="LLM provider to use (openai, anthropic, ollama, mock). Uses default if omitted.",
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description="Specific model name to use; falls back to provider default if omitted.",
+    )
 
 
 class CitationOut(BaseModel):

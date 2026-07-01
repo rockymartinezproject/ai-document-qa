@@ -165,6 +165,14 @@ export type ChatStreamEvent =
     }
   | { type: "error"; message: string; request_id?: string };
 
+export interface LLMProviderInfo {
+  name: string;
+  label: string;
+  default_model: string;
+  available: boolean;
+  requires_api_key: boolean;
+}
+
 export interface Conversation {
   id: string;
   title?: string;
@@ -237,13 +245,15 @@ export async function* askStream(
   document_id?: string,
   search_type: "semantic" | "keyword" | "hybrid" = "hybrid",
   rerank = true,
+  provider?: string,
+  model?: string,
   signal?: AbortSignal
 ): AsyncGenerator<ChatStreamEvent> {
   const url = `${API_BASE}/api/chat/stream`;
   const res = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ query, conversation_id, document_id, search_type, rerank }),
+    body: JSON.stringify({ query, conversation_id, document_id, search_type, rerank, provider, model }),
     signal,
   });
 
@@ -343,12 +353,14 @@ export const api = {
       conversation_id?: string,
       document_id?: string,
       search_type: "semantic" | "keyword" | "hybrid" = "hybrid",
-      rerank = true
+      rerank = true,
+      provider?: string,
+      model?: string
     ) => {
       return request<ChatResponse>("/api/chat/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query, conversation_id, document_id, search_type, rerank }),
+        body: JSON.stringify({ query, conversation_id, document_id, search_type, rerank, provider, model }),
       });
     },
   },
@@ -377,6 +389,10 @@ export const api = {
       }),
     usage: (id: string) =>
       request<ConversationUsageResponse>(`/api/conversations/${id}/usage`),
+  },
+
+  providers: {
+    list: () => request<LLMProviderInfo[]>("/api/providers"),
   },
 
   usage: {

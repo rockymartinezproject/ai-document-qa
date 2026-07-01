@@ -36,7 +36,11 @@ class Settings(BaseSettings):
     CHUNK_OVERLAP: int = 128
 
     # LLM
+    DEFAULT_LLM_PROVIDER: str = "auto"  # auto | openai | anthropic | ollama | mock
     DEFAULT_LLM_MODEL: str = "gpt-4o"
+    OPENAI_DEFAULT_MODEL: str = "gpt-4o"
+    ANTHROPIC_DEFAULT_MODEL: str = "claude-3-5-sonnet-20241022"
+    OLLAMA_DEFAULT_MODEL: str = "llama3.2"
     LOCAL_LLM_URL: str = "http://localhost:11434"
 
     # Conversations

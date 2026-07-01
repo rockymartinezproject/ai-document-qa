@@ -21,7 +21,7 @@ from app.services.chat_service import (
     update_conversation_title,
 )
 from app.services.cost_tracker import count_tokens, estimate_cost
-from app.services.llm import get_llm_provider
+from app.services.llm import create_llm_provider, get_llm_provider
 from app.services.rag import (
     RAG_SYSTEM_PROMPT,
     _build_prompt,
@@ -115,6 +115,8 @@ async def ask_question(
             score_threshold=body.score_threshold,
             session=session,
             rerank=body.rerank,
+            provider=body.provider,
+            model=body.model,
         )
     except Exception as e:
         logger.error("RAG pipeline failed: %s", e)
@@ -130,7 +132,11 @@ async def ask_question(
         provider=result.provider,
     )
 
-    llm_provider = get_llm_provider()
+    llm_provider = (
+        create_llm_provider(body.provider, body.model)
+        if body.provider
+        else get_llm_provider()
+    )
     input_tokens, output_tokens, cost = _count_request_cost(
         query=body.query,
         answer=result.answer,
@@ -219,6 +225,8 @@ async def stream_answer(
                 score_threshold=body.score_threshold,
                 session=session,
                 rerank=body.rerank,
+                provider=body.provider,
+                model=body.model,
             ):
                 if event["type"] == "token":
                     full_answer += event["token"]
@@ -248,7 +256,11 @@ async def stream_answer(
                 )
                 await session.commit()
 
-                llm_provider = get_llm_provider()
+                llm_provider = (
+                    create_llm_provider(body.provider, body.model)
+                    if body.provider
+                    else get_llm_provider()
+                )
                 input_tokens, output_tokens, cost = _count_request_cost(
                     query=body.query,
                     answer=answer_to_save,

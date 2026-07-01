@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { api, askStream, ChatMessage, Conversation } from "@/lib/api";
+import { api, askStream, ChatMessage, Conversation, LLMProviderInfo } from "@/lib/api";
 import {
   ChatInput,
   ChatSidebar,
@@ -21,6 +21,9 @@ export default function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [isLoadingConversations, setIsLoadingConversations] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [providers, setProviders] = useState<LLMProviderInfo[]>([]);
+  const [selectedProvider, setSelectedProvider] = useState<string>("");
+  const [selectedModel, setSelectedModel] = useState<string>("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const restoredFromUrl = useRef(false);
@@ -106,6 +109,33 @@ export default function ChatPage() {
   }, [loadConversations]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    async function loadProviders() {
+      try {
+        const res = await api.providers.list();
+        const list = res.data || [];
+        if (cancelled) return;
+        setProviders(list);
+        const firstAvailable = list.find((p) => p.available);
+        if (firstAvailable) {
+          setSelectedProvider(firstAvailable.name);
+          setSelectedModel(firstAvailable.default_model);
+        }
+      } catch (e) {
+        if (!cancelled) {
+          console.error(e);
+        }
+      }
+    }
+
+    loadProviders();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -170,6 +200,8 @@ export default function ChatPage() {
         undefined,
         "hybrid",
         true,
+        selectedProvider || undefined,
+        selectedModel || undefined,
         controller.signal
       );
 
@@ -252,12 +284,49 @@ export default function ChatPage() {
 
       <div className="flex flex-1 flex-col">
         <div className="border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 px-6 py-4">
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
-            Chat
-          </h2>
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">
-            Ask questions about your indexed documents.
-          </p>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">
+                Chat
+              </h2>
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                Ask questions about your indexed documents.
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="text-sm text-zinc-600 dark:text-zinc-400">
+                Provider
+              </label>
+              <select
+                value={selectedProvider}
+                onChange={(e) => {
+                  const name = e.target.value;
+                  setSelectedProvider(name);
+                  const info = providers.find((p) => p.name === name);
+                  setSelectedModel(info?.default_model || "");
+                }}
+                disabled={isStreaming}
+                className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              >
+                {providers.map((p) => (
+                  <option key={p.name} value={p.name} disabled={!p.available}>
+                    {p.label} {p.requires_api_key && !p.available ? "(no key)" : ""}
+                  </option>
+                ))}
+              </select>
+              <label className="text-sm text-zinc-600 dark:text-zinc-400">
+                Model
+              </label>
+              <input
+                type="text"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                disabled={isStreaming}
+                placeholder="model"
+                className="w-40 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-sm text-zinc-900 focus:border-indigo-500 focus:outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+              />
+            </div>
+          </div>
         </div>
 
         <MessageThread
