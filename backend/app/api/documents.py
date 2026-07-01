@@ -210,9 +210,9 @@ async def reindex_document(
         logger.warning("Failed to delete old Qdrant points for %s: %s", document_id, e)
 
     # Re-chunk and embed
-    from app.services.chunking import chunk_document
+    from app.services.chunking import chunk_document_async
 
-    chunks = chunk_document(
+    chunks = await chunk_document_async(
         text=document.extracted_text,
         document_id=document.id,
         source=document.filename,
@@ -221,12 +221,17 @@ async def reindex_document(
     for chunk in chunks:
         session.add(
             Chunk(
+                id=chunk.id,
                 document_id=chunk.document_id,
                 index=chunk.index,
                 text=chunk.text,
                 source=chunk.source,
                 start_char=chunk.start_char,
                 end_char=chunk.end_char,
+                parent_chunk_id=chunk.parent_chunk_id,
+                level=chunk.level,
+                chunk_strategy=chunk.strategy,
+                metadata_json=chunk.metadata or None,
             )
         )
     await session.commit()

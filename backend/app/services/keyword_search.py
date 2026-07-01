@@ -68,6 +68,10 @@ async def search_chunks_keywords(
                 "index": chunk.index,
                 "start_char": chunk.start_char,
                 "end_char": chunk.end_char,
+                "parent_chunk_id": chunk.parent_chunk_id,
+                "level": chunk.level,
+                "chunk_strategy": chunk.chunk_strategy,
+                "metadata_json": chunk.metadata_json,
                 "score": score,
             }
         )

@@ -5,7 +5,7 @@ SQLAlchemy models for persistent entities.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, JSON, String, Text
 
 from app.db.base import Base
 
@@ -64,6 +64,10 @@ class Chunk(Base):
     end_char = Column(Integer, nullable=False)
     embedding = Column(Text, nullable=True)  # JSON serialized vector
     embedding_model = Column(String(128), nullable=True)
+    parent_chunk_id = Column(String(36), ForeignKey("chunks.id", ondelete="CASCADE"), nullable=True)
+    level = Column(Integer, default=0, nullable=False)
+    chunk_strategy = Column(String(32), default="recursive", nullable=False)
+    metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=now_utc, nullable=False)
 
 

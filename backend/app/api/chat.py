@@ -165,6 +165,10 @@ async def ask_question(
                 "index": c.index,
                 "text": c.text,
                 "score": c.score,
+                "parent_chunk_id": c.parent_chunk_id,
+                "level": c.level,
+                "chunk_strategy": c.chunk_strategy,
+                "metadata_json": c.metadata_json,
             }
             for c in result.citations
         ],

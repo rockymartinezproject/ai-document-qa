@@ -14,7 +14,7 @@ from app.core.config import settings
 from app.core.logging import get_logger
 from app.db.models import Chunk as ChunkModel
 from app.db.models import Document
-from app.services.chunking import chunk_document
+from app.services.chunking import chunk_document_async
 from app.services.embeddings import (
     deserialize_embedding,
     get_embedding_provider,
@@ -107,6 +107,10 @@ async def embed_chunks_for_document(
             "embedding": deserialize_embedding(c.embedding),
             "start_char": c.start_char,
             "end_char": c.end_char,
+            "parent_chunk_id": c.parent_chunk_id,
+            "level": c.level,
+            "chunk_strategy": c.chunk_strategy,
+            "metadata_json": c.metadata_json,
         }
         for c in chunks
         if c.embedding
@@ -124,7 +128,7 @@ async def _chunk_and_store(
     if not document.extracted_text:
         return
 
-    chunks = chunk_document(
+    chunks = await chunk_document_async(
         text=document.extracted_text,
         document_id=document.id,
         source=document.filename,
@@ -133,12 +137,17 @@ async def _chunk_and_store(
     for chunk in chunks:
         session.add(
             ChunkModel(
+                id=chunk.id,
                 document_id=chunk.document_id,
                 index=chunk.index,
                 text=chunk.text,
                 source=chunk.source,
                 start_char=chunk.start_char,
                 end_char=chunk.end_char,
+                parent_chunk_id=chunk.parent_chunk_id,
+                level=chunk.level,
+                chunk_strategy=chunk.strategy,
+                metadata_json=chunk.metadata or None,
             )
         )
 

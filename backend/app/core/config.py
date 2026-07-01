@@ -43,6 +43,14 @@ class Settings(BaseSettings):
     OLLAMA_DEFAULT_MODEL: str = "llama3.2"
     LOCAL_LLM_URL: str = "http://localhost:11434"
 
+    # Chunking
+    CHUNK_STRATEGY: str = "recursive"  # recursive | semantic | hierarchical
+    SEMANTIC_SIMILARITY_THRESHOLD: float = 0.7
+    SEMANTIC_MAX_CHUNK_SIZE: int = 512
+    HIERARCHICAL_PARENT_SIZE: int = 1536
+    HIERARCHICAL_CHILD_SIZE: int = 256
+    HIERARCHICAL_OVERLAP: int = 64
+
     # Conversations
     AUTO_TITLE_ENABLED: bool = True
 

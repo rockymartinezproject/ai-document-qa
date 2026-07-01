@@ -6,7 +6,10 @@ import re
 from dataclasses import dataclass
 from typing import Any, AsyncIterator, Dict, List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.db.models import Chunk
 
 from app.core.logging import get_logger
 from app.services.embeddings import get_embedding_provider
@@ -28,6 +31,10 @@ class Citation:
     index: int
     text: str
     score: float
+    parent_chunk_id: Optional[str] = None
+    level: int = 0
+    chunk_strategy: str = "recursive"
+    metadata_json: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -45,14 +52,17 @@ Do not make up facts. Cite your sources inline using [1], [2], etc., matching th
 
 
 def _build_prompt(query: str, contexts: List[dict]) -> str:
-    """Build a RAG prompt from query and retrieved contexts."""
+    """Build a RAG prompt from query and retrieved contexts.
+
+    If a context has been enriched with parent text (parent-document retrieval),
+    the parent's broader text is used instead of the child chunk text.
+    """
     context_blocks = []
     for i, ctx in enumerate(contexts, start=1):
         source = ctx.get("source", "Unknown source")
         index = ctx.get("index", 0)
-        text = ctx.get("text", "").strip()
+        text = ctx.get("parent_text", ctx.get("text", "")).strip()
         context_blocks.append(f"[{i}] Source: {source} (chunk {index})\n{text}")
-
     context_text = "\n\n".join(context_blocks)
 
     return f"""{RAG_SYSTEM_PROMPT}
@@ -100,6 +110,31 @@ def _parse_and_renumber_citations(
     return renumbered_answer, cited_contexts
 
 
+async def _enrich_with_parent_context(
+    results: List[Dict[str, Any]],
+    session: Optional[AsyncSession],
+) -> List[Dict[str, Any]]:
+    """Replace child chunk text with parent chunk text when available."""
+    if not session:
+        return results
+
+    parent_ids = {r["parent_chunk_id"] for r in results if r.get("parent_chunk_id")}
+    if not parent_ids:
+        return results
+
+    result = await session.execute(select(Chunk).where(Chunk.id.in_(parent_ids)))
+    parents = {c.id: c.text for c in result.scalars().all()}
+
+    enriched = []
+    for r in results:
+        copy = dict(r)
+        parent_id = copy.get("parent_chunk_id")
+        if parent_id and parent_id in parents:
+            copy["parent_text"] = parents[parent_id]
+        enriched.append(copy)
+    return enriched
+
+
 async def answer_question(
     query: str,
     top_k: int = 5,
@@ -144,7 +179,8 @@ async def answer_question(
             provider=provider or get_embedding_provider().name,
         )
 
-    # 2. Generate answer with LLM
+    # 2. Enrich child chunks with parent context and generate answer
+    results = await _enrich_with_parent_context(results, session)
     llm_provider = create_llm_provider(provider, model) if provider else get_llm_provider()
     prompt = _build_prompt(query, results)
     answer = await llm_provider.generate(
@@ -155,6 +191,7 @@ async def answer_question(
 
     # 3. Validate and renumber citations, keeping only cited sources
     answer, cited_results = _parse_and_renumber_citations(answer, results)
+    # Preserve parent_text in cited results so citations can expose it if desired
 
     citations = [
         Citation(
@@ -164,6 +201,10 @@ async def answer_question(
             index=r["index"],
             text=r["text"],
             score=r["score"],
+            parent_chunk_id=r.get("parent_chunk_id"),
+            level=r.get("level", 0),
+            chunk_strategy=r.get("chunk_strategy", "recursive"),
+            metadata_json=r.get("metadata_json"),
         )
         for r in cited_results
     ]
@@ -235,6 +276,7 @@ async def answer_question_stream(
     ]
     yield {"type": "citations", "citations": all_citations}
 
+    results = await _enrich_with_parent_context(results, session)
     llm_provider = create_llm_provider(provider, model) if provider else get_llm_provider()
     prompt = _build_prompt(query, results)
     answer_parts: List[str] = []
@@ -258,6 +300,10 @@ async def answer_question_stream(
             index=r["index"],
             text=r["text"],
             score=r["score"],
+            parent_chunk_id=r.get("parent_chunk_id"),
+            level=r.get("level", 0),
+            chunk_strategy=r.get("chunk_strategy", "recursive"),
+            metadata_json=r.get("metadata_json"),
         )
         for r in cited_results
     ]

@@ -106,6 +106,10 @@ async def upsert_chunk_points(
                 "index": chunk["index"],
                 "start_char": chunk["start_char"],
                 "end_char": chunk["end_char"],
+                "parent_chunk_id": chunk.get("parent_chunk_id"),
+                "level": chunk.get("level", 0),
+                "chunk_strategy": chunk.get("chunk_strategy", "recursive"),
+                "metadata_json": chunk.get("metadata_json"),
             },
         )
         for chunk in chunks
@@ -177,6 +181,10 @@ async def search_similar(
             "index": r.payload.get("index"),
             "start_char": r.payload.get("start_char"),
             "end_char": r.payload.get("end_char"),
+            "parent_chunk_id": r.payload.get("parent_chunk_id"),
+            "level": r.payload.get("level", 0),
+            "chunk_strategy": r.payload.get("chunk_strategy", "recursive"),
+            "metadata_json": r.payload.get("metadata_json"),
         }
         for r in results
     ]

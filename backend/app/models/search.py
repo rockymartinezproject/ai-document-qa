@@ -2,7 +2,7 @@
 Pydantic models for vector/search API.
 """
 
-from typing import Literal, Optional
+from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -46,6 +46,10 @@ class SearchResult(BaseModel):
     index: int
     start_char: int
     end_char: int
+    parent_chunk_id: Optional[str] = None
+    level: int = 0
+    chunk_strategy: str = "recursive"
+    metadata_json: Optional[Dict[str, Any]] = None
 
 
 class SearchResponse(BaseModel):

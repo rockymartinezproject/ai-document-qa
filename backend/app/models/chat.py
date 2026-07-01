@@ -3,7 +3,7 @@ Pydantic models for chat API.
 """
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -51,6 +51,10 @@ class CitationOut(BaseModel):
     index: int
     text: str
     score: float
+    parent_chunk_id: Optional[str] = None
+    level: int = 0
+    chunk_strategy: str = "recursive"
+    metadata_json: Optional[Dict[str, Any]] = None
 
 
 class ChatResponse(BaseModel):
