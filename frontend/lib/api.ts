@@ -136,6 +136,55 @@ export interface UsageBreakdownResponse {
 
 export type UsageTimeRange = 7 | 30 | "all";
 
+export interface EvaluationMetrics {
+  context_precision: number;
+  answer_relevance: number;
+  faithfulness: number;
+  overall: number;
+}
+
+export interface EvaluationResult {
+  query: string;
+  expected_answer: string;
+  actual_answer: string;
+  metrics: EvaluationMetrics;
+}
+
+export interface EvaluationRun {
+  id: string;
+  name: string;
+  status: string;
+  sample_count: number;
+  aggregate?: EvaluationMetrics;
+  regression: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EvaluationRunDetail extends EvaluationRun {
+  samples?: { query: string; expected_answer: string; document_id?: string; provider?: string; model?: string }[];
+  results?: EvaluationResult[];
+}
+
+export interface GeneratedSample {
+  query: string;
+  expected_answer: string;
+  context: string;
+  chunk_id: string;
+}
+
+export interface GeneratedDatasetResponse {
+  document_id: string;
+  samples: GeneratedSample[];
+}
+
+export interface EvaluationRunRequest {
+  name: string;
+  samples: { query: string; expected_answer: string; document_id?: string; provider?: string; model?: string }[];
+  top_k?: number;
+  rerank?: boolean;
+}
+
 export interface Citation {
   chunk_id: string;
   document_id: string;
@@ -404,6 +453,25 @@ export const api = {
       }
       return request<UsageBreakdownResponse>(`/api/usage/breakdown?${params.toString()}`);
     },
+  },
+
+  evaluation: {
+    generate: (documentId: string, sampleCount = 3, provider?: string, model?: string) => {
+      return request<GeneratedDatasetResponse>("/api/evaluate/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ document_id: documentId, sample_count: sampleCount, provider, model }),
+      });
+    },
+    createRun: (body: EvaluationRunRequest) =>
+      request<EvaluationRun>("/api/evaluate/runs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }),
+    listRuns: () => request<EvaluationRun[]>("/api/evaluate/runs"),
+    getRun: (id: string) => request<EvaluationRunDetail>(`/api/evaluate/runs/${id}`),
+    deleteRun: (id: string) => request<{ deleted: boolean }>(`/api/evaluate/runs/${id}`, { method: "DELETE" }),
   },
 };
 

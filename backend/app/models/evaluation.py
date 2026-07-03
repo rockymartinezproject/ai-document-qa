@@ -2,6 +2,7 @@
 Pydantic models for the evaluation API.
 """
 
+from datetime import datetime
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -72,6 +73,7 @@ class EvaluationRequest(BaseModel):
 class EvaluationRunRequest(BaseModel):
     """Request body for running RAG and then evaluating."""
 
+    name: str = Field(default="Evaluation run", min_length=1, max_length=256)
     samples: List[EvaluationRunSample] = Field(..., min_length=1)
     top_k: int = Field(default=5, ge=1, le=20)
     search_type: str = Field(default="hybrid")
@@ -83,3 +85,62 @@ class EvaluationResponse(BaseModel):
 
     results: List[EvaluationResult]
     aggregate: EvaluationMetrics
+
+
+class GenerateDatasetRequest(BaseModel):
+    """Request body for generating a test dataset from a document."""
+
+    document_id: str = Field(..., min_length=1)
+    sample_count: int = Field(default=3, ge=1, le=20)
+    provider: Optional[str] = Field(default=None)
+    model: Optional[str] = Field(default=None)
+
+
+class GeneratedSample(BaseModel):
+    """A synthetic question/answer pair generated from a chunk."""
+
+    query: str
+    expected_answer: str
+    context: str
+    chunk_id: str
+
+
+class GeneratedDatasetResponse(BaseModel):
+    """Response containing generated evaluation samples."""
+
+    document_id: str
+    samples: List[GeneratedSample]
+
+
+class EvaluationRunOut(BaseModel):
+    """Summary of a persisted evaluation run."""
+
+    id: str
+    name: str
+    status: str
+    sample_count: int
+    aggregate: Optional[EvaluationMetrics] = None
+    regression: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class EvaluationRunDetail(BaseModel):
+    """Full details of a persisted evaluation run."""
+
+    id: str
+    name: str
+    status: str
+    sample_count: int
+    samples: Optional[List[EvaluationRunSample]] = None
+    results: Optional[List[EvaluationResult]] = None
+    aggregate: Optional[EvaluationMetrics] = None
+    regression: bool = False
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

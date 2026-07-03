@@ -94,3 +94,20 @@ class Message(Base):
     citations = Column(Text, nullable=True)  # JSON serialized
     provider = Column(String(128), nullable=True)
     created_at = Column(DateTime, default=now_utc, nullable=False)
+
+
+class EvaluationRun(Base):
+    """Stores the results of an evaluation run."""
+
+    __tablename__ = "evaluation_runs"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(256), nullable=False)
+    status = Column(String(32), default="pending", nullable=False)
+    sample_count = Column(Integer, default=0, nullable=False)
+    samples = Column(JSON, nullable=True)
+    results = Column(JSON, nullable=True)
+    aggregate = Column(JSON, nullable=True)
+    regression = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=now_utc, nullable=False)
+    updated_at = Column(DateTime, default=now_utc, onupdate=now_utc, nullable=False)

@@ -1,5 +1,5 @@
 """
-RAG evaluation metrics.
+RAG evaluation metrics and dataset/run helpers.
 
 Implements a lightweight, dependency-free evaluation pipeline using:
 - context_precision: token overlap between retrieved and expected contexts
@@ -9,10 +9,15 @@ Implements a lightweight, dependency-free evaluation pipeline using:
 
 import math
 import re
-from typing import Dict, List
+from typing import Any, Dict, List, Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.logging import get_logger
+from app.db.models import Chunk
 from app.services.embeddings import get_embedding_provider
+from app.services.llm import create_llm_provider, get_llm_provider
 
 logger = get_logger("evaluation")
 
@@ -117,8 +122,83 @@ def aggregate_metrics(results: List[Dict[str, float]]) -> Dict[str, float]:
     return {key: round(sum(r[key] for r in results) / len(results), 4) for key in keys}
 
 
+def has_regression(current_overall: float, previous_overall: Optional[float], threshold: float = 0.05) -> bool:
+    """Return True if the current score dropped more than threshold vs the previous run."""
+    if previous_overall is None:
+        return False
+    return (previous_overall - current_overall) > threshold
+
+
+async def generate_dataset(
+    session: AsyncSession,
+    document_id: str,
+    sample_count: int = 3,
+    provider_name: Optional[str] = None,
+    model: Optional[str] = None,
+) -> List[Dict[str, str]]:
+    """Generate synthetic Q&A pairs from a document's chunks."""
+    result = await session.execute(
+        select(Chunk)
+        .where(Chunk.document_id == document_id)
+        .order_by(Chunk.index)
+        .limit(sample_count * 2)
+    )
+    chunks = result.scalars().all()
+    if not chunks:
+        return []
+
+    # Prefer leaf-level chunks (children in hierarchical, all in recursive/semantic)
+    leaf_chunks = [c for c in chunks if c.level == 1] or list(chunks)
+    selected = leaf_chunks[:sample_count]
+
+    provider = (
+        create_llm_provider(provider_name, model)
+        if provider_name
+        else get_llm_provider()
+    )
+
+    samples = []
+    for chunk in selected:
+        prompt = (
+            "Generate a concise question and a short answer based ONLY on the following context.\n"
+            "Format your response exactly as:\n"
+            "Question: <question>\n"
+            "Answer: <answer>\n\n"
+            f"Context:\n{chunk.text[:1000]}"
+        )
+        try:
+            output = await provider.generate(
+                prompt=prompt,
+                system_message="You are a helpful assistant that creates reading-comprehension questions.",
+                temperature=0.3,
+            )
+        except Exception as exc:
+            logger.warning("Failed to generate sample for chunk %s: %s", chunk.id, exc)
+            continue
+
+        question = ""
+        answer = ""
+        for line in output.splitlines():
+            if line.lower().startswith("question:"):
+                question = line.split(":", 1)[1].strip()
+            elif line.lower().startswith("answer:"):
+                answer = line.split(":", 1)[1].strip()
+
+        if question and answer:
+            samples.append(
+                {
+                    "query": question,
+                    "expected_answer": answer,
+                    "context": chunk.text,
+                    "chunk_id": chunk.id,
+                }
+            )
+
+    return samples
+
+
 def format_evaluation_report(
-    results: List[Dict[str, any]], aggregate: Dict[str, float]
+    results: List[Dict[str, Any]], aggregate: Dict[str, float]
 ) -> str:
     """Return a human-readable summary of an evaluation run."""
     lines = ["Evaluation Report", "=" * 40]
