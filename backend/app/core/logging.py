@@ -4,10 +4,10 @@ Structured logging configuration.
 
 import logging
 import sys
-from datetime import datetime
 from typing import Any, Dict
 
 from fastapi import Request
+
 
 # Configure root logger
 def setup_logging() -> None:

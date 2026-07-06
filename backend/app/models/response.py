@@ -2,7 +2,7 @@
 Standardized API response models.
 """
 
-from typing import Any, Generic, Optional, TypeVar
+from typing import Generic, Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -15,7 +15,9 @@ class APIResponse(BaseModel, Generic[T]):
     success: bool = Field(default=True, description="Whether the request succeeded")
     data: Optional[T] = Field(default=None, description="Response payload")
     message: Optional[str] = Field(default=None, description="Human-readable message")
-    request_id: Optional[str] = Field(default=None, description="Request correlation ID")
+    request_id: Optional[str] = Field(
+        default=None, description="Request correlation ID"
+    )
 
 
 class HealthCheckResponse(BaseModel):

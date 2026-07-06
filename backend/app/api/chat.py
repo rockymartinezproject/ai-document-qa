@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.db.base import get_db
 from app.db.models import Conversation
-from app.models.chat import ChatRequest, ChatResponse
+from app.models.chat import ChatRequest, ChatResponse, CitationOut
 from app.models.response import APIResponse
 from app.services.chat_service import (
     add_message,
@@ -158,18 +158,18 @@ async def ask_question(
     data = ChatResponse(
         answer=result.answer,
         citations=[
-            {
-                "chunk_id": c.chunk_id,
-                "document_id": c.document_id,
-                "source": c.source,
-                "index": c.index,
-                "text": c.text,
-                "score": c.score,
-                "parent_chunk_id": c.parent_chunk_id,
-                "level": c.level,
-                "chunk_strategy": c.chunk_strategy,
-                "metadata_json": c.metadata_json,
-            }
+            CitationOut(
+                chunk_id=c.chunk_id,
+                document_id=c.document_id,
+                source=c.source,
+                index=c.index,
+                text=c.text,
+                score=c.score,
+                parent_chunk_id=c.parent_chunk_id,
+                level=c.level,
+                chunk_strategy=c.chunk_strategy,
+                metadata_json=c.metadata_json,
+            )
             for c in result.citations
         ],
         provider=result.provider,
@@ -288,7 +288,9 @@ async def stream_answer(
                     answer=answer_to_save,
                 )
             except Exception as save_err:
-                logger.error("Failed to persist streamed assistant message: %s", save_err)
+                logger.error(
+                    "Failed to persist streamed assistant message: %s", save_err
+                )
 
     return StreamingResponse(
         event_generator(),

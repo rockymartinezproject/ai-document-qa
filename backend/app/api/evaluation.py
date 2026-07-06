@@ -17,6 +17,7 @@ from app.models.evaluation import (
     EvaluationRunOut,
     EvaluationRunRequest,
     EvaluationMetrics,
+    GeneratedSample,
     GenerateDatasetRequest,
     GeneratedDatasetResponse,
 )
@@ -103,7 +104,7 @@ async def generate_test_dataset(
         success=True,
         data=GeneratedDatasetResponse(
             document_id=body.document_id,
-            samples=samples,
+            samples=[GeneratedSample(**s) for s in samples],
         ),
         request_id=request_id,
     )

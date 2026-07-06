@@ -5,28 +5,23 @@ services:
     image: postgres:16-alpine
     container_name: ai-doc-qa-db
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: aidocqa
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-aidocqa}
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d aidocqa"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
       - ai-doc-qa-network
-    restart: unless-stopped
+    restart: always
 
   qdrant:
     image: qdrant/qdrant:v1.12.1
     container_name: ai-doc-qa-qdrant
-    ports:
-      - "6333:6333"
-      - "6334:6334"
     volumes:
       - qdrant-storage:/qdrant/storage
     healthcheck:
@@ -37,7 +32,7 @@ services:
       start_period: 10s
     networks:
       - ai-doc-qa-network
-    restart: unless-stopped
+    restart: always
 
   backend:
     build:
@@ -47,8 +42,8 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - ENVIRONMENT=development
-      - DATABASE_URL=postgresql+asyncpg://postgres:postgres@db:5432/aidocqa
+      - ENVIRONMENT=production
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-aidocqa}
       - QDRANT_HOST=qdrant
       - QDRANT_PORT=6333
     env_file:
@@ -62,7 +57,7 @@ services:
         condition: service_healthy
     networks:
       - ai-doc-qa-network
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
       interval: 30s
@@ -78,13 +73,13 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
       backend:
         condition: service_healthy
     networks:
       - ai-doc-qa-network
-    restart: unless-stopped
+    restart: always
     healthcheck:
       test: ["CMD-SHELL", "node -e \"require('http').get('http://localhost:3000', (r) => r.statusCode === 200 ? process.exit(0) : process.exit(1))\""]
       interval: 30s

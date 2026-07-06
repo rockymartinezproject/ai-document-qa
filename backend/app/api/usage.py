@@ -10,7 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.logging import get_logger
 from app.db.base import get_db
 from app.models.response import APIResponse
-from app.models.usage import TotalUsageResponse, UsageBreakdownResponse
+from app.models.usage import (
+    TotalUsageResponse,
+    UsageBreakdownItem,
+    UsageBreakdownResponse,
+)
 from app.services.chat_service import get_total_usage, get_usage_breakdown
 
 router = APIRouter(prefix="/usage", tags=["Usage"])
@@ -46,7 +50,9 @@ async def total_usage(
 async def usage_breakdown(
     request: Request,
     group_by: GroupBy = Query(..., description="Dimension to group usage by"),
-    days: Optional[int] = Query(default=None, ge=1, description="Limit to the last N days"),
+    days: Optional[int] = Query(
+        default=None, ge=1, description="Limit to the last N days"
+    ),
     session: AsyncSession = Depends(get_db),
 ):
     """Return usage/cost aggregated by day, model, or conversation."""
@@ -60,16 +66,7 @@ async def usage_breakdown(
     data = UsageBreakdownResponse(
         group_by=group_by,
         days=days,
-        items=[
-            {
-                "label": item["label"],
-                "input_tokens": item["input_tokens"],
-                "output_tokens": item["output_tokens"],
-                "cost": item["cost"],
-                "count": item["count"],
-            }
-            for item in items
-        ],
+        items=[UsageBreakdownItem(**item) for item in items],
     )
 
     return APIResponse(

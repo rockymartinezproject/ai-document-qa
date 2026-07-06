@@ -1,0 +1,11 @@
+node_modules/
+.next/
+.turbo/
+.git/
+.env
+.env.*
+*.log
+Dockerfile
+.dockerignore
+out/
+dist/
