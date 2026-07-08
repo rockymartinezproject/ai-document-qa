@@ -5,14 +5,15 @@ Document upload and management endpoints.
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import status as http_status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_settings
+from app.api.deps import get_current_user, get_settings
 from app.core.config import Settings
 from app.core.logging import get_logger
 from app.db.base import get_db
-from app.db.models import Chunk, Document
+from app.db.models import Chunk, Document, User
 from app.models.document import (
     DocumentActionResponse,
     DocumentOut,
@@ -21,7 +22,12 @@ from app.models.document import (
     URLIngestResponse,
 )
 from app.models.response import APIResponse
-from app.services.document_service import embed_chunks_for_document, save_from_url, save_upload, validate_upload
+from app.services.document_service import (
+    embed_chunks_for_document,
+    save_from_url,
+    save_upload,
+    validate_upload,
+)
 from app.services.vector_store import delete_document_chunks
 
 router = APIRouter(prefix="/documents", tags=["Documents"])
@@ -34,6 +40,7 @@ async def upload_document(
     file: UploadFile = File(...),
     session: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
+    current_user: User = Depends(get_current_user),
 ):
     """Upload a PDF document for indexing.
 
@@ -60,6 +67,7 @@ async def upload_document(
         filename=file.filename or "unknown.pdf",
         content_type=file.content_type or "application/pdf",
         file_bytes=file_bytes,
+        user_id=current_user.id,
     )
 
     data = DocumentUploadResponse(
@@ -74,7 +82,11 @@ async def upload_document(
     return APIResponse(
         success=document.status == "indexed",
         data=data,
-        message="Document uploaded and indexed." if document.status == "indexed" else "Upload succeeded but text extraction failed.",
+        message=(
+            "Document uploaded and indexed."
+            if document.status == "indexed"
+            else "Upload succeeded but text extraction failed."
+        ),
         request_id=request_id,
     )
 
@@ -84,6 +96,7 @@ async def ingest_url(
     request: Request,
     body: URLIngestRequest,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Ingest a web page by URL for indexing.
 
@@ -95,7 +108,7 @@ async def ingest_url(
 
     logger.info("URL ingestion requested: %s", url)
 
-    document = await save_from_url(session=session, url=url)
+    document = await save_from_url(session=session, url=url, user_id=current_user.id)
 
     data = URLIngestResponse(
         id=document.id,
@@ -110,7 +123,11 @@ async def ingest_url(
     return APIResponse(
         success=document.status == "indexed",
         data=data,
-        message="URL ingested and indexed." if document.status == "indexed" else "URL ingestion failed.",
+        message=(
+            "URL ingested and indexed."
+            if document.status == "indexed"
+            else "URL ingestion failed."
+        ),
         request_id=request_id,
     )
 
@@ -119,11 +136,16 @@ async def ingest_url(
 async def list_documents(
     request: Request,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """List all uploaded documents."""
+    """List documents owned by the current user."""
     request_id = getattr(request.state, "request_id", None)
 
-    result = await session.execute(select(Document).order_by(Document.created_at.desc()))
+    result = await session.execute(
+        select(Document)
+        .where(Document.user_id == current_user.id)
+        .order_by(Document.created_at.desc())
+    )
     rows = result.scalars().all()
 
     return APIResponse(
@@ -138,14 +160,21 @@ async def delete_document(
     request: Request,
     document_id: str,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Delete a document, its chunks, and its Qdrant vectors."""
     request_id = getattr(request.state, "request_id", None)
 
-    result = await session.execute(select(Document).where(Document.id == document_id))
+    result = await session.execute(
+        select(Document).where(
+            Document.id == document_id, Document.user_id == current_user.id
+        )
+    )
     document = result.scalar_one_or_none()
     if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
 
     filename = document.filename
 
@@ -182,25 +211,36 @@ async def delete_document(
     )
 
 
-@router.post("/{document_id}/reindex", response_model=APIResponse[DocumentActionResponse])
+@router.post(
+    "/{document_id}/reindex", response_model=APIResponse[DocumentActionResponse]
+)
 async def reindex_document(
     request: Request,
     document_id: str,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Re-embed and re-sync a document to Qdrant."""
     request_id = getattr(request.state, "request_id", None)
 
-    result = await session.execute(select(Document).where(Document.id == document_id))
+    result = await session.execute(
+        select(Document).where(
+            Document.id == document_id, Document.user_id == current_user.id
+        )
+    )
     document = result.scalar_one_or_none()
     if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
 
     if not document.extracted_text:
         raise HTTPException(status_code=400, detail="Document has no extractable text")
 
     # Delete existing chunks and embeddings
-    await session.execute(Chunk.__table__.delete().where(Chunk.document_id == document_id))
+    await session.execute(
+        Chunk.__table__.delete().where(Chunk.document_id == document_id)
+    )
     await session.commit()
 
     # Delete Qdrant points

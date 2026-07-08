@@ -4,7 +4,7 @@ Document upload business logic.
 
 import uuid
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 from urllib.parse import urlparse
 
 from sqlalchemy import select
@@ -159,12 +159,12 @@ async def _chunk_and_store(
     )
 
 
-
 async def save_upload(
     session: AsyncSession,
     filename: str,
     content_type: str,
     file_bytes: bytes,
+    user_id: Optional[str] = None,
 ) -> Document:
     """Persist uploaded file to disk and create database record.
 
@@ -194,13 +194,16 @@ async def save_upload(
 
     # Create DB record
     document = Document(
+        user_id=user_id,
         filename=safe_name,
         content_type=content_type,
         file_path=str(file_path),
         file_size=len(file_bytes),
         extracted_text=extracted_text,
         status=status,
-        error_message=None if extracted_text else "Text extraction failed or PDF was empty.",
+        error_message=(
+            None if extracted_text else "Text extraction failed or PDF was empty."
+        ),
     )
     session.add(document)
     await session.commit()
@@ -222,6 +225,7 @@ async def save_upload(
 async def save_from_url(
     session: AsyncSession,
     url: str,
+    user_id: Optional[str] = None,
 ) -> Document:
     """Scrape a URL and create a database record.
 
@@ -237,6 +241,7 @@ async def save_from_url(
     if not scraped:
         # Create failed record
         document = Document(
+            user_id=user_id,
             filename=Path(urlparse(url).path).name or "url_document",
             content_type="text/html",
             file_path=url,
@@ -252,6 +257,7 @@ async def save_from_url(
 
     status = "indexed"
     document = Document(
+        user_id=user_id,
         filename=scraped["title"],
         content_type="text/html",
         file_path=scraped["url"],

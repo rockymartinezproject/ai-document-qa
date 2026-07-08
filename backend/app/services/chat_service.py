@@ -20,8 +20,9 @@ async def get_or_create_conversation(
     session: AsyncSession,
     conversation_id: Optional[str] = None,
     title: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Conversation:
-    """Get existing conversation or create a new one."""
+    """Get existing conversation or create a new one for the given user."""
     if conversation_id:
         result = await session.execute(
             select(Conversation).where(Conversation.id == conversation_id)
@@ -30,7 +31,7 @@ async def get_or_create_conversation(
         if conversation:
             return conversation
 
-    conversation = Conversation(title=title or "New Chat")
+    conversation = Conversation(title=title or "New Chat", user_id=user_id)
     session.add(conversation)
     await session.commit()
     await session.refresh(conversation)
@@ -63,13 +64,13 @@ async def add_message(
 async def list_conversations(
     session: AsyncSession,
     limit: int = 50,
+    user_id: Optional[str] = None,
 ) -> List[Conversation]:
-    """List recent conversations."""
-    result = await session.execute(
-        select(Conversation)
-        .order_by(Conversation.updated_at.desc())
-        .limit(limit)
-    )
+    """List recent conversations for a user."""
+    query = select(Conversation).order_by(Conversation.updated_at.desc()).limit(limit)
+    if user_id:
+        query = query.where(Conversation.user_id == user_id)
+    result = await session.execute(query)
     return result.scalars().all()
 
 
@@ -78,11 +79,13 @@ async def get_conversation_with_messages(
     conversation_id: str,
     limit: int = 100,
     offset: int = 0,
+    user_id: Optional[str] = None,
 ) -> Optional[tuple[Conversation, List[Message]]]:
     """Get a conversation and a paginated slice of its messages."""
-    conv_result = await session.execute(
-        select(Conversation).where(Conversation.id == conversation_id)
-    )
+    filters = [Conversation.id == conversation_id]
+    if user_id:
+        filters.append(Conversation.user_id == user_id)
+    conv_result = await session.execute(select(Conversation).where(*filters))
     conversation = conv_result.scalar_one_or_none()
     if not conversation:
         return None
@@ -234,7 +237,9 @@ async def get_conversation_usage_totals(
     result = await session.execute(
         select(
             func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
-            func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+            func.coalesce(func.sum(UsageRecord.output_tokens), 0).label(
+                "output_tokens"
+            ),
             func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
         ).where(UsageRecord.conversation_id == conversation_id)
     )
@@ -248,17 +253,19 @@ async def get_conversation_usage_totals(
 
 async def get_total_usage(
     session: AsyncSession,
+    user_id: Optional[str] = None,
 ) -> dict:
     """Return aggregated usage totals across all conversations."""
     from sqlalchemy import func
 
-    result = await session.execute(
-        select(
-            func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
-            func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
-            func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
-        )
+    query = select(
+        func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
+        func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+        func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
     )
+    if user_id:
+        query = query.join(Conversation).where(Conversation.user_id == user_id)
+    result = await session.execute(query)
     row = result.mappings().one()
     return {
         "input_tokens": int(row["input_tokens"] or 0),
@@ -271,6 +278,7 @@ async def get_usage_breakdown(
     session: AsyncSession,
     group_by: str,
     days: Optional[int] = None,
+    user_id: Optional[str] = None,
 ) -> List[dict]:
     """Return aggregated usage broken down by day, model, or conversation.
 
@@ -286,14 +294,20 @@ async def get_usage_breakdown(
     if days is not None and days > 0:
         cutoff = datetime.utcnow() - timedelta(days=days)
         filters.append(UsageRecord.created_at >= cutoff)
+    if user_id:
+        filters.append(Conversation.user_id == user_id)
 
     if group_by == "day":
         day_col = func.date(UsageRecord.created_at).label("day")
         query = (
             select(
                 day_col.label("label"),
-                func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
-                func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+                func.coalesce(func.sum(UsageRecord.input_tokens), 0).label(
+                    "input_tokens"
+                ),
+                func.coalesce(func.sum(UsageRecord.output_tokens), 0).label(
+                    "output_tokens"
+                ),
                 func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
                 func.coalesce(func.count(UsageRecord.id), 0).label("count"),
             )
@@ -305,11 +319,16 @@ async def get_usage_breakdown(
         query = (
             select(
                 UsageRecord.model.label("label"),
-                func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
-                func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+                func.coalesce(func.sum(UsageRecord.input_tokens), 0).label(
+                    "input_tokens"
+                ),
+                func.coalesce(func.sum(UsageRecord.output_tokens), 0).label(
+                    "output_tokens"
+                ),
                 func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
                 func.coalesce(func.count(UsageRecord.id), 0).label("count"),
             )
+            .join(Conversation)
             .where(*filters)
             .group_by(UsageRecord.model)
             .order_by(func.sum(UsageRecord.cost).desc())
@@ -318,13 +337,19 @@ async def get_usage_breakdown(
         query = (
             select(
                 UsageRecord.conversation_id.label("conversation_id"),
-                func.coalesce(func.max(Conversation.title), UsageRecord.conversation_id).label("label"),
-                func.coalesce(func.sum(UsageRecord.input_tokens), 0).label("input_tokens"),
-                func.coalesce(func.sum(UsageRecord.output_tokens), 0).label("output_tokens"),
+                func.coalesce(
+                    func.max(Conversation.title), UsageRecord.conversation_id
+                ).label("label"),
+                func.coalesce(func.sum(UsageRecord.input_tokens), 0).label(
+                    "input_tokens"
+                ),
+                func.coalesce(func.sum(UsageRecord.output_tokens), 0).label(
+                    "output_tokens"
+                ),
                 func.coalesce(func.sum(UsageRecord.cost), 0.0).label("cost"),
                 func.coalesce(func.count(UsageRecord.id), 0).label("count"),
             )
-            .outerjoin(Conversation, Conversation.id == UsageRecord.conversation_id)
+            .join(Conversation)
             .where(*filters)
             .group_by(UsageRecord.conversation_id)
             .order_by(func.sum(UsageRecord.cost).desc())
@@ -354,11 +379,13 @@ async def get_usage_breakdown(
 async def delete_conversation(
     session: AsyncSession,
     conversation_id: str,
+    user_id: Optional[str] = None,
 ) -> bool:
     """Delete a conversation and its messages."""
-    result = await session.execute(
-        select(Conversation).where(Conversation.id == conversation_id)
-    )
+    filters = [Conversation.id == conversation_id]
+    if user_id:
+        filters.append(Conversation.user_id == user_id)
+    result = await session.execute(select(Conversation).where(*filters))
     conversation = result.scalar_one_or_none()
     if not conversation:
         return False

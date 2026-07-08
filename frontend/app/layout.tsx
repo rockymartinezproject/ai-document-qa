@@ -3,6 +3,8 @@ import "./globals.css";
 import { Navbar } from "@/components/Navbar";
 import { Footer } from "@/components/Footer";
 import { ToastContainer } from "@/components/Toast";
+import { AuthProvider } from "@/components/AuthProvider";
+import { AuthGuard } from "@/components/AuthGuard";
 
 export const metadata: Metadata = {
   title: "AI Document Q&A",
@@ -39,10 +41,14 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col bg-zinc-50 dark:bg-zinc-950 font-sans">
-        <Navbar />
-        <main className="flex-1">{children}</main>
-        <Footer />
-        <ToastContainer />
+        <AuthProvider>
+          <AuthGuard>
+            <Navbar />
+            <main className="flex-1">{children}</main>
+            <Footer />
+            <ToastContainer />
+          </AuthGuard>
+        </AuthProvider>
       </body>
     </html>
   );

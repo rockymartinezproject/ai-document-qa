@@ -2,7 +2,14 @@
  * Typed API client for the FastAPI backend.
  */
 
+import { getToken, removeToken, User } from "./auth";
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+
+function authHeaders(): Record<string, string> {
+  const token = getToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export interface APIResponse<T> {
   success: boolean;
@@ -264,10 +271,11 @@ async function request<T>(
 ): Promise<APIResponse<T>> {
   const url = `${API_BASE}${path}`;
   const res = await fetch(url, {
+    ...options,
     headers: {
+      ...authHeaders(),
       ...options?.headers,
     },
-    ...options,
   });
 
   const requestId = res.headers.get("x-request-id") || undefined;
@@ -301,7 +309,10 @@ export async function* askStream(
   const url = `${API_BASE}/api/chat/stream`;
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(),
+    },
     body: JSON.stringify({ query, conversation_id, document_id, search_type, rerank, provider, model }),
     signal,
   });
@@ -343,9 +354,42 @@ export async function* askStream(
   }
 }
 
+export interface LoginCredentials {
+  email: string;
+  password: string;
+}
+
+export interface RegisterCredentials {
+  email: string;
+  password: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: User;
+}
+
 export const api = {
   health: () => request<HealthData>("/api/health"),
   ready: () => request<ReadinessData>("/api/health/ready"),
+
+  auth: {
+    register: (credentials: RegisterCredentials) =>
+      request<User>("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(credentials),
+      }),
+    login: (credentials: LoginCredentials) =>
+      request<AuthResponse>("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(credentials),
+      }),
+    me: () => request<User>("/api/auth/me"),
+    logout: () => removeToken(),
+  },
 
   documents: {
     list: () => request<DocumentOut[]>("/api/documents"),

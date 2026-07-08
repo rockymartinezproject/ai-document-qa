@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import chat, chunks, conversations, documents, embeddings, evaluation, health, providers, search, usage
+from app.api import auth, chat, chunks, conversations, documents, embeddings, evaluation, health, providers, search, usage
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.db.base import engine
@@ -50,6 +50,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(auth.router, prefix="/api", tags=["Authentication"])
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(documents.router, prefix="/api", tags=["Documents"])
 app.include_router(chunks.router, prefix="/api", tags=["Chunks"])

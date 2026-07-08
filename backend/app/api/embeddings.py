@@ -3,12 +3,14 @@ Embedding status and management endpoints.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import status as http_status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.logging import get_logger
 from app.db.base import get_db
-from app.db.models import Chunk
+from app.db.models import Chunk, Document, User
 from app.models.embedding import EmbedDocumentResponse, EmbeddingStatusResponse
 from app.models.response import APIResponse
 from app.services.embeddings import get_embedding_provider
@@ -22,14 +24,20 @@ logger = get_logger("embeddings_api")
 async def embedding_status(
     request: Request,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Get current embedding system status."""
+    """Get current embedding system status for the current user."""
     request_id = getattr(request.state, "request_id", None)
     provider = get_embedding_provider()
 
-    total = await session.scalar(select(func.count(Chunk.id)))
+    base_stmt = select(Chunk).join(Document).where(Document.user_id == current_user.id)
+    total = await session.scalar(
+        select(func.count(Chunk.id)).select_from(base_stmt.subquery())
+    )
     embedded = await session.scalar(
-        select(func.count(Chunk.id)).where(Chunk.embedding.isnot(None))
+        select(func.count(Chunk.id)).select_from(
+            base_stmt.where(Chunk.embedding.isnot(None)).subquery()
+        )
     )
 
     data = EmbeddingStatusResponse(
@@ -52,14 +60,25 @@ async def embed_document(
     request: Request,
     document_id: str,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Generate embeddings for all chunks of a specific document."""
     request_id = getattr(request.state, "request_id", None)
 
+    doc_result = await session.execute(
+        select(Document).where(
+            Document.id == document_id, Document.user_id == current_user.id
+        )
+    )
+    if doc_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
     count = await embed_chunks_for_document(session, document_id)
     if count == 0:
         raise HTTPException(
-            status_code=404,
+            status_code=http_status.HTTP_404_NOT_FOUND,
             detail="Document not found or has no chunks to embed.",
         )
 

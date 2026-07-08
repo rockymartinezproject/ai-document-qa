@@ -3,12 +3,14 @@ Vector/keyword/hybrid search and Qdrant sync endpoints.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import status as http_status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.logging import get_logger
 from app.db.base import get_db
-from app.db.models import Chunk
+from app.db.models import Chunk, Document, User
 from app.models.response import APIResponse
 from app.models.search import (
     SearchRequest,
@@ -69,9 +71,20 @@ async def search(
     request: Request,
     body: SearchRequest,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Perform semantic, keyword, or hybrid search across indexed chunks."""
+    """Perform semantic, keyword, or hybrid search across the current user's indexed chunks."""
     request_id = getattr(request.state, "request_id", None)
+
+    # Resolve allowed document IDs for the current user
+    doc_stmt = select(Document.id).where(Document.user_id == current_user.id)
+    if body.document_id:
+        doc_stmt = doc_stmt.where(Document.id == body.document_id)
+    user_doc_ids = set((await session.execute(doc_stmt)).scalars().all())
+    if body.document_id and not user_doc_ids:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
 
     if body.search_type == "keyword":
         results = await search_chunks_keywords(
@@ -79,6 +92,7 @@ async def search(
             query=body.query,
             top_k=body.top_k,
             document_id=body.document_id,
+            document_ids=list(user_doc_ids) if not body.document_id else None,
         )
     elif body.search_type == "semantic":
         provider = get_embedding_provider()
@@ -102,9 +116,13 @@ async def search(
             rerank=body.rerank,
         )
 
+    # Enforce user isolation on vector/hybrid results
+    if body.search_type != "keyword":
+        results = [r for r in results if r.get("document_id") in user_doc_ids]
+
     data = SearchResponse(
         query=body.query,
-        results=[SearchResult(**r) for r in results],
+        results=[SearchResult(**r) for r in results[: body.top_k]],
         total_results=len(results),
     )
 
@@ -120,12 +138,23 @@ async def sync_document_to_qdrant(
     request: Request,
     document_id: str,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Sync a document's embedded chunks to Qdrant.
 
     Existing points for this document are deleted first to avoid duplicates.
     """
     request_id = getattr(request.state, "request_id", None)
+
+    doc_result = await session.execute(
+        select(Document).where(
+            Document.id == document_id, Document.user_id == current_user.id
+        )
+    )
+    if doc_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
 
     result = await session.execute(
         select(Chunk).where(

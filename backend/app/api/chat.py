@@ -5,12 +5,14 @@ Chat / RAG question-answering endpoints with conversation memory.
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.logging import get_logger
 from app.db.base import get_db
-from app.db.models import Conversation
+from app.db.models import Conversation, User
 from app.models.chat import ChatRequest, ChatResponse, CitationOut
 from app.models.response import APIResponse
 from app.services.chat_service import (
@@ -77,6 +79,7 @@ async def ask_question(
     request: Request,
     body: ChatRequest,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Ask a question and get a grounded, cited answer.
 
@@ -92,12 +95,18 @@ async def ask_question(
     """
     request_id = getattr(request.state, "request_id", None)
 
-    # Get or create conversation
+    # Get or create conversation belonging to the current user
     conversation = await get_or_create_conversation(
         session=session,
         conversation_id=body.conversation_id,
         title=body.query[:50] + "..." if len(body.query) > 50 else body.query,
+        user_id=current_user.id,
     )
+    if conversation.user_id and conversation.user_id != current_user.id:
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Conversation does not belong to the current user",
+        )
 
     # Save user message
     await add_message(
@@ -189,6 +198,7 @@ async def stream_answer(
     request: Request,
     body: ChatRequest,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Ask a question and stream the answer as Server-Sent Events.
 

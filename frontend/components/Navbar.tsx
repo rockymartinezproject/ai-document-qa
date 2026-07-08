@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ThemeToggle } from "./ThemeToggle";
+import { useAuth } from "./AuthProvider";
 
 const navigation = [
   { name: "Home", href: "/" },
@@ -15,6 +16,7 @@ const navigation = [
 
 export function Navbar() {
   const pathname = usePathname();
+  const { user, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 bg-white/80 dark:bg-zinc-900/80 backdrop-blur border-b border-zinc-200 dark:border-zinc-800">
@@ -44,6 +46,26 @@ export function Navbar() {
               {item.name}
             </Link>
           ))}
+          {user ? (
+            <div className="flex items-center gap-x-3">
+              <span className="hidden text-sm text-zinc-600 dark:text-zinc-400 sm:inline">
+                {user.email}
+              </span>
+              <button
+                onClick={logout}
+                className="text-sm font-semibold text-zinc-700 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
+              >
+                Log out
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="text-sm font-semibold text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+            >
+              Log in
+            </Link>
+          )}
           <ThemeToggle />
         </div>
       </nav>

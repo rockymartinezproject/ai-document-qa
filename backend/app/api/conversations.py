@@ -6,10 +6,14 @@ import json
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import select
+from fastapi import status as http_status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.logging import get_logger
 from app.db.base import get_db
+from app.db.models import Conversation, User
 from app.models.chat import (
     ConversationDetailOut,
     ConversationOut,
@@ -55,11 +59,12 @@ def _message_out(message) -> MessageOut:
 async def get_conversations(
     request: Request,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """List all chat conversations."""
+    """List chat conversations for the current user."""
     request_id = getattr(request.state, "request_id", None)
 
-    conversations = await list_conversations(session)
+    conversations = await list_conversations(session, user_id=current_user.id)
 
     data = []
     for conv in conversations:
@@ -86,6 +91,7 @@ async def create_conversation(
     request: Request,
     body: CreateConversationRequest,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Create a new empty conversation."""
     request_id = getattr(request.state, "request_id", None)
@@ -95,6 +101,7 @@ async def create_conversation(
     conversation = await get_or_create_conversation(
         session=session,
         title=body.title,
+        user_id=current_user.id,
     )
 
     return APIResponse(
@@ -117,15 +124,18 @@ async def get_conversation(
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Get a single conversation with paginated messages."""
     request_id = getattr(request.state, "request_id", None)
 
     result = await get_conversation_with_messages(
-        session, conversation_id, limit=limit, offset=offset
+        session, conversation_id, limit=limit, offset=offset, user_id=current_user.id
     )
     if not result:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
 
     conversation, messages = result
 
@@ -150,8 +160,9 @@ async def rename_conversation(
     conversation_id: str,
     body: UpdateConversationRequest,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Rename a conversation."""
+    """Rename a conversation owned by the current user."""
     request_id = getattr(request.state, "request_id", None)
 
     conversation = await update_conversation_title(
@@ -159,8 +170,10 @@ async def rename_conversation(
         conversation_id=conversation_id,
         title=body.title,
     )
-    if not conversation:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation is None or conversation.user_id != current_user.id:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
 
     msg_count = await count_messages(session, conversation.id)
     return APIResponse(
@@ -176,14 +189,29 @@ async def rename_conversation(
     )
 
 
-@router.get("/{conversation_id}/usage", response_model=APIResponse[ConversationUsageResponse])
+@router.get(
+    "/{conversation_id}/usage", response_model=APIResponse[ConversationUsageResponse]
+)
 async def conversation_usage(
     request: Request,
     conversation_id: str,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Return usage and cost records for a conversation."""
     request_id = getattr(request.state, "request_id", None)
+
+    # Verify ownership via conversation
+    conv_result = await session.execute(
+        select(Conversation).where(
+            Conversation.id == conversation_id,
+            Conversation.user_id == current_user.id,
+        )
+    )
+    if conv_result.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
 
     records = await get_usage_by_conversation(session, conversation_id)
     totals = await get_conversation_usage_totals(session, conversation_id)
@@ -220,13 +248,18 @@ async def remove_conversation(
     request: Request,
     conversation_id: str,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Delete a conversation and its messages."""
     request_id = getattr(request.state, "request_id", None)
 
-    deleted = await delete_conversation(session, conversation_id)
+    deleted = await delete_conversation(
+        session, conversation_id, user_id=current_user.id
+    )
     if not deleted:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND, detail="Conversation not found"
+        )
 
     return APIResponse(
         success=True,

@@ -24,6 +24,7 @@ async def search_chunks_keywords(
     query: str,
     top_k: int = 10,
     document_id: Optional[str] = None,
+    document_ids: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Search chunk text with simple keyword/BM25-style scoring.
 
@@ -31,7 +32,8 @@ async def search_chunks_keywords(
         session: Async SQLAlchemy session.
         query: User query.
         top_k: Maximum number of results.
-        document_id: Optional document filter.
+        document_id: Optional single document filter.
+        document_ids: Optional list of allowed document IDs (user isolation).
 
     Returns:
         List of result dicts with the same shape as vector search results.
@@ -44,6 +46,8 @@ async def search_chunks_keywords(
     stmt = select(Chunk).where(or_(*conditions))
     if document_id:
         stmt = stmt.where(Chunk.document_id == document_id)
+    elif document_ids:
+        stmt = stmt.where(Chunk.document_id.in_(document_ids))
 
     result = await session.execute(stmt)
     chunks = result.scalars().all()

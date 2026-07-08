@@ -7,8 +7,10 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user
 from app.core.logging import get_logger
 from app.db.base import get_db
+from app.db.models import User
 from app.models.response import APIResponse
 from app.models.usage import (
     TotalUsageResponse,
@@ -27,11 +29,12 @@ GroupBy = Literal["day", "model", "conversation"]
 async def total_usage(
     request: Request,
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Return aggregated token usage and cost across all conversations."""
+    """Return aggregated token usage and cost for the current user."""
     request_id = getattr(request.state, "request_id", None)
 
-    totals = await get_total_usage(session)
+    totals = await get_total_usage(session, user_id=current_user.id)
 
     data = TotalUsageResponse(
         total_input_tokens=totals["input_tokens"],
@@ -54,12 +57,15 @@ async def usage_breakdown(
         default=None, ge=1, description="Limit to the last N days"
     ),
     session: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Return usage/cost aggregated by day, model, or conversation."""
+    """Return usage/cost aggregated by day, model, or conversation for the current user."""
     request_id = getattr(request.state, "request_id", None)
 
     try:
-        items = await get_usage_breakdown(session, group_by=group_by, days=days)
+        items = await get_usage_breakdown(
+            session, group_by=group_by, days=days, user_id=current_user.id
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
