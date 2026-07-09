@@ -102,6 +102,29 @@ export interface SyncDocumentResponse {
   message: string;
 }
 
+export interface Chunk {
+  id: string;
+  document_id: string;
+  index: number;
+  text: string;
+  source: string;
+  start_char: number;
+  end_char: number;
+  parent_chunk_id?: string | null;
+  level: number;
+  chunk_strategy: string;
+  metadata_json?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface EmbeddingStatus {
+  provider: string;
+  dimension: number;
+  total_chunks: number;
+  embedded_chunks: number;
+  pending_chunks: number;
+}
+
 export interface UsageRecord {
   id: string;
   conversation_id: string;
@@ -416,6 +439,22 @@ export const api = {
       request<DocumentActionResponse>(`/api/documents/${id}/reindex`, {
         method: "POST",
       }),
+  },
+
+  chunks: {
+    list: (documentId?: string) => {
+      const params = documentId ? `?document_id=${encodeURIComponent(documentId)}` : "";
+      return request<Chunk[]>(`/api/chunks${params}`);
+    },
+  },
+
+  embeddings: {
+    status: () => request<EmbeddingStatus>("/api/embeddings/status"),
+    embedDocument: (documentId: string) =>
+      request<{ document_id: string; chunks_processed: number; provider: string; message: string }>(
+        `/api/embeddings/embed/${documentId}`,
+        { method: "POST" }
+      ),
   },
 
   search: {
