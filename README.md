@@ -4,6 +4,12 @@ An AI-powered document question-answering system built with **RAG (Retrieval-Aug
 
 Upload PDFs or paste URLs → ask questions in natural language → get grounded, cited answers.
 
+[![CI](https://github.com/rockymartinezproject/ai-document-qa/actions/workflows/ci.yml/badge.svg)](https://github.com/rockymartinezproject/ai-document-qa/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+[![Python](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
+[![Node](https://img.shields.io/badge/node-20+-green.svg)](https://nodejs.org/)
+[![Docker](https://img.shields.io/badge/docker--compose-ready-blue.svg)](./docker-compose.yml)
+
 ---
 
 ## Features
@@ -106,6 +112,24 @@ docker compose -f docker-compose.prod.yml up --build -d
 - Backend API: http://localhost:8000
 - API Docs: http://localhost:8000/docs
 - Qdrant Dashboard: http://localhost:6333/dashboard
+
+---
+
+## Screenshots
+
+*Placeholder visuals — real app screenshots will replace these once the frontend can be captured reliably in this environment.*
+
+| Chat | Documents |
+|------|-----------|
+| ![Chat](./docs/screenshots/chat.png) | ![Documents](./docs/screenshots/documents.png) |
+
+| Upload | Dashboard |
+|--------|-----------|
+| ![Upload](./docs/screenshots/upload.png) | ![Dashboard](./docs/screenshots/dashboard.png) |
+
+| Evaluate | Login |
+|----------|-------|
+| ![Evaluate](./docs/screenshots/evaluate.png) | ![Login](./docs/screenshots/login.png) |
 
 ---
 
