@@ -48,7 +48,7 @@ jobs:
 
       - name: Run tests
         env:
-          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/aidocqa_test
+          DATABASE_URL: sqlite+aiosqlite:///./test.db
           QDRANT_HOST: localhost
           QDRANT_PORT: 6333
         run: pytest -q
