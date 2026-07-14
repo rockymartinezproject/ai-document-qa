@@ -35,6 +35,13 @@ export default defineConfig({
       env: {
         DATABASE_URL: "sqlite+aiosqlite:///./e2e.db",
         SECRET_KEY: "test-secret-key-for-e2e",
+        // Keep E2E fast and deterministic: use mock LLM and skip model downloads.
+        OPENAI_API_KEY: "",
+        ANTHROPIC_API_KEY: "",
+        LOCAL_LLM_URL: "",
+        DEFAULT_LLM_PROVIDER: "mock",
+        RERANK_ENABLED: "false",
+        HF_HUB_OFFLINE: "1",
       },
     },
     {
