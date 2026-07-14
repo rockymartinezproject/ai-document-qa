@@ -1,12 +1,13 @@
 """Tests for keyword search over chunks."""
 
 import pytest
+import pytest_asyncio
 
 from app.db.models import Chunk, Document
 from app.services.keyword_search import search_chunks_keywords
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def sample_document(db_session):
     document = Document(
         id="doc-keyword",

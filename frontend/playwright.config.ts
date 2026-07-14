@@ -45,9 +45,10 @@ export default defineConfig({
       },
     },
     {
-      command: "npm run dev",
+      // Build first, then serve the production app for more stable E2E runs.
+      command: "npm run build && npm run start",
       url: "http://127.0.0.1:3000",
-      timeout: 120_000,
+      timeout: 180_000,
       reuseExistingServer: !process.env.CI,
     },
   ],

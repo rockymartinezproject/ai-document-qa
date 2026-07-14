@@ -17,7 +17,7 @@ def _pdf_bytes() -> bytes:
     return buffer.read()
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def auth_user(db_session):
     user = create_test_user(db_session, "docs-test@example.com", "password123")
     await db_session.commit()
