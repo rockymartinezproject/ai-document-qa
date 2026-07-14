@@ -1,6 +1,5 @@
 """Tests for keyword search over chunks."""
 
-import pytest
 import pytest_asyncio
 
 from app.db.models import Chunk, Document

@@ -37,7 +37,17 @@ def _get_encoder(model: str):
     try:
         return tiktoken.encoding_for_model(model)
     except KeyError:
+        pass
+    except Exception:
+        # Network/cache errors when fetching model-specific encodings.
+        logger.warning("Failed to load tiktoken encoder for %s", model, exc_info=True)
+
+    # Fallback to a commonly cached encoding; ignore errors so we can approximate.
+    try:
         return tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        logger.warning("Failed to load cl100k_base tiktoken encoder")
+        return None
 
 
 def _approximate_tokens(text: str) -> int:

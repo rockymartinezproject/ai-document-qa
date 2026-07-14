@@ -1,6 +1,6 @@
 """Integration tests for conversation endpoints."""
 
-import pytest
+import pytest_asyncio
 
 from tests.conftest import create_test_user, user_token
 

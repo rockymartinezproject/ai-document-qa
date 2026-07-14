@@ -2,7 +2,7 @@
 
 from io import BytesIO
 
-import pytest
+import pytest_asyncio
 from pypdf import PdfWriter
 
 from tests.conftest import create_test_user, user_token
