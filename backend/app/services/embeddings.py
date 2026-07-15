@@ -41,7 +41,10 @@ class OpenAIEmbeddingProvider(EmbeddingProvider):
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         import openai
 
-        self._client = openai.AsyncOpenAI(api_key=api_key or settings.OPENAI_API_KEY)
+        self._client = openai.AsyncOpenAI(
+            api_key=api_key or settings.OPENAI_API_KEY,
+            timeout=settings.REQUEST_TIMEOUT,
+        )
         self._model = model or settings.EMBEDDING_MODEL
 
     async def embed(self, texts: List[str]) -> List[List[float]]:

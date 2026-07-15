@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.db.base import get_db
 from app.db.models import Conversation, User
@@ -75,6 +76,7 @@ async def _maybe_update_title(
 
 
 @router.post("/ask", response_model=APIResponse[ChatResponse])
+@limiter.limit("10/minute")
 async def ask_question(
     request: Request,
     body: ChatRequest,
@@ -194,6 +196,7 @@ async def ask_question(
 
 
 @router.post("/stream")
+@limiter.limit("10/minute")
 async def stream_answer(
     request: Request,
     body: ChatRequest,

@@ -7,9 +7,13 @@ from datetime import datetime, timezone
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.extension import _rate_limit_exceeded_handler
+from slowapi.middleware import SlowAPIMiddleware
 
 from app.api import auth, chat, chunks, conversations, documents, embeddings, evaluation, health, providers, search, usage
 from app.core.config import settings
+from app.core.limiter import limiter
 from app.core.logging import setup_logging
 from app.db.base import engine
 from app.db.models import Base
@@ -38,9 +42,12 @@ app = FastAPI(
     redoc_url="/redoc",
     lifespan=lifespan,
 )
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Middleware (order matters: last added = first executed)
 app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(SlowAPIMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,

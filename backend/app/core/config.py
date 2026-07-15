@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     OLLAMA_DEFAULT_MODEL: str = "llama3.2"
     LOCAL_LLM_URL: str = "http://localhost:11434"
 
+    # Timeouts
+    REQUEST_TIMEOUT: float = 60.0  # seconds for external LLM/embedding calls
+    STREAMING_TIMEOUT: float = 120.0  # seconds for streaming responses
+
     # Chunking
     CHUNK_STRATEGY: str = "recursive"  # recursive | semantic | hierarchical
     SEMANTIC_SIMILARITY_THRESHOLD: float = 0.7

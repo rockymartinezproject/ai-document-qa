@@ -63,7 +63,10 @@ class OpenAIProvider(LLMProvider):
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         import openai
 
-        self._client = openai.AsyncOpenAI(api_key=api_key or settings.OPENAI_API_KEY)
+        self._client = openai.AsyncOpenAI(
+            api_key=api_key or settings.OPENAI_API_KEY,
+            timeout=settings.REQUEST_TIMEOUT,
+        )
         self._model = model or settings.DEFAULT_LLM_MODEL
 
     async def generate(
@@ -118,7 +121,10 @@ class AnthropicProvider(LLMProvider):
     def __init__(self, api_key: Optional[str] = None, model: str = "claude-3-5-sonnet-20241022"):
         import anthropic
 
-        self._client = anthropic.AsyncAnthropic(api_key=api_key or settings.ANTHROPIC_API_KEY)
+        self._client = anthropic.AsyncAnthropic(
+            api_key=api_key or settings.ANTHROPIC_API_KEY,
+            timeout=settings.REQUEST_TIMEOUT,
+        )
         self._model = model
 
     async def generate(
@@ -173,7 +179,7 @@ class OllamaProvider(LLMProvider):
     ) -> str:
         logger.info("Calling Ollama model=%s at %s", self._model, self._base_url)
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT) as client:
             response = await client.post(
                 f"{self._base_url}/api/generate",
                 json={
@@ -196,7 +202,7 @@ class OllamaProvider(LLMProvider):
     ) -> AsyncIterator[str]:
         logger.info("Streaming Ollama model=%s at %s", self._model, self._base_url)
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=settings.STREAMING_TIMEOUT) as client:
             async with client.stream(
                 "POST",
                 f"{self._base_url}/api/generate",

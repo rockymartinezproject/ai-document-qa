@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_settings
 from app.core.config import Settings
+from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.db.base import get_db
 from app.db.models import Chunk, Document, User
@@ -35,6 +36,7 @@ logger = get_logger("documents_api")
 
 
 @router.post("/upload", response_model=APIResponse[DocumentUploadResponse])
+@limiter.limit("10/minute")
 async def upload_document(
     request: Request,
     file: UploadFile = File(...),
@@ -92,6 +94,7 @@ async def upload_document(
 
 
 @router.post("/url", response_model=APIResponse[URLIngestResponse])
+@limiter.limit("10/minute")
 async def ingest_url(
     request: Request,
     body: URLIngestRequest,

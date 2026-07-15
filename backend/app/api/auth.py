@@ -6,6 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.limiter import limiter
 from app.core.logging import get_logger
 from app.core.security import create_access_token, get_password_hash, verify_password
 from app.db.base import get_db
@@ -33,6 +34,7 @@ async def _get_user_by_email(session: AsyncSession, email: str) -> User | None:
     response_model=APIResponse[UserOut],
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("5/minute")
 async def register(
     request: Request,
     body: RegisterRequest,
@@ -65,6 +67,7 @@ async def register(
 
 
 @router.post("/login", response_model=APIResponse[TokenResponse])
+@limiter.limit("10/minute")
 async def login_json(
     request: Request,
     body: LoginRequest,
@@ -93,6 +96,7 @@ async def login_json(
 
 
 @router.post("/token", response_model=APIResponse[TokenResponse])
+@limiter.limit("10/minute")
 async def login_form(
     request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
