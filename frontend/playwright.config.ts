@@ -36,6 +36,8 @@ export default defineConfig({
       env: {
         DATABASE_URL: "sqlite+aiosqlite:///./e2e.db",
         SECRET_KEY: "test-secret-key-for-e2e",
+        // Allow the frontend served on 127.0.0.1:3000 to call the backend.
+        CORS_ORIGINS: '["http://127.0.0.1:3000", "http://localhost:3000"]',
         // Keep E2E fast and deterministic: use mock LLM and skip model downloads.
         OPENAI_API_KEY: "",
         ANTHROPIC_API_KEY: "",
