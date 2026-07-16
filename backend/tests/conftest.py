@@ -19,12 +19,18 @@ from app.main import app
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
-def create_test_user(session: AsyncSession, email: str, password: str) -> User:
+def create_test_user(
+    session: AsyncSession,
+    email: str,
+    password: str,
+    is_superuser: bool = False,
+) -> User:
     """Create and return a test user."""
     user = User(
         email=email,
         hashed_password=get_password_hash(password),
         is_active=True,
+        is_superuser=is_superuser,
     )
     session.add(user)
     return user

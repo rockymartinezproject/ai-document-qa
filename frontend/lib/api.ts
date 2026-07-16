@@ -556,6 +556,16 @@ export const api = {
     getRun: (id: string) => request<EvaluationRunDetail>(`/api/evaluate/runs/${id}`),
     deleteRun: (id: string) => request<{ deleted: boolean }>(`/api/evaluate/runs/${id}`, { method: "DELETE" }),
   },
+
+  admin: {
+    listUsers: () => request<User[]>("/api/admin/users"),
+    updateUser: (id: string, updates: { is_active?: boolean; is_superuser?: boolean }) =>
+      request<User>(`/api/admin/users/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      }),
+  },
 };
 
 export { APIError };

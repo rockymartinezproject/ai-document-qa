@@ -12,6 +12,7 @@ const navigation = [
   { name: "Documents", href: "/documents" },
   { name: "Dashboard", href: "/dashboard" },
   { name: "Evaluate", href: "/evaluate" },
+  { name: "Admin", href: "/admin", adminOnly: true },
   { name: "About", href: "/about" },
 ];
 
@@ -34,7 +35,9 @@ export function Navbar() {
           </Link>
         </div>
         <div className="flex items-center gap-x-6">
-          {navigation.map((item) => (
+          {navigation
+            .filter((item) => !item.adminOnly || user?.is_superuser)
+            .map((item) => (
             <Link
               key={item.name}
               href={item.href}

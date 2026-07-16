@@ -6,12 +6,13 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
 from fastapi import FastAPI
+from sqlalchemy import inspect, text
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi.extension import _rate_limit_exceeded_handler
 from slowapi.middleware import SlowAPIMiddleware
 
-from app.api import auth, chat, chunks, conversations, documents, embeddings, evaluation, health, providers, search, usage
+from app.api import admin, auth, chat, chunks, conversations, documents, embeddings, evaluation, health, providers, search, usage
 from app.core.config import settings
 from app.core.limiter import limiter
 from app.core.logging import setup_logging
@@ -23,12 +24,23 @@ from app.middleware.request_logging import RequestLoggingMiddleware
 setup_logging()
 
 
+def _migrate_schema(sync_conn):
+    """Apply lightweight schema migrations for existing SQLite databases."""
+    inspector = inspect(sync_conn)
+    user_columns = {col["name"] for col in inspector.get_columns("users")}
+    if "is_superuser" not in user_columns:
+        sync_conn.execute(
+            text("ALTER TABLE users ADD COLUMN is_superuser BOOLEAN NOT NULL DEFAULT 0")
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events."""
-    # Startup: create database tables
+    # Startup: create database tables and apply idempotent migrations
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_migrate_schema)
     yield
     # Shutdown: dispose engine
     await engine.dispose()
@@ -57,6 +69,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(admin.router, prefix="/api", tags=["Admin"])
 app.include_router(auth.router, prefix="/api", tags=["Authentication"])
 app.include_router(health.router, prefix="/api", tags=["Health"])
 app.include_router(documents.router, prefix="/api", tags=["Documents"])
